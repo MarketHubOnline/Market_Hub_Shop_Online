@@ -200,7 +200,7 @@
           </div>
 
           <div class="sidebar-block">
-            <div style="font-size:0.75rem;font-weight:700;color:var(--muted);margin-bottom:0.35rem;">Filter by Shop</div>
+            <div class="sidebar-heading">Filter by Shop</div>
             <select id="shop-filter" onchange="handleShopDropdownChange()" style="font-size:0.78rem;padding:0.4rem;">
               <option value="all">All Verified Shops</option>
             </select>
@@ -405,13 +405,13 @@
     </section>
 
     <!-- =========================================================
-         VIEW 2: SELLER CENTRE
+         VIEW 2: SELLER CENTRE (UPDATED WITH CAPITAL/PROFIT, PRODUCT RATE, STOCK & FREE SHIP CONTROLS)
          ========================================================= -->
     <section id="view-seller" class="hidden">
       <div class="row-between" style="margin-bottom:0.85rem;">
         <div>
           <h2 style="margin:0;color:var(--primary-deep);">🏪 Seller Centre</h2>
-          <p id="seller-shop-subtitle" style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Manage your store orders, income analytics, products, and delivery rates.</p>
+          <p id="seller-shop-subtitle" style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Manage your store orders, puhunan vs. tubo analytics, product posts, stocks, and shipping.</p>
         </div>
         <button class="secondary sm" onclick="switchView('marketplace')">← Back to Marketplace</button>
       </div>
@@ -420,11 +420,11 @@
         <button id="seller-nav-home" class="seller-menu-btn active" onclick="switchSellerTab('home')">
           🏠 My Home
         </button>
-        <button id="seller-nav-income" class="seller-menu-btn" onclick="switchSellerTab('income')">
-          📊 Income Monitoring
-        </button>
         <button id="seller-nav-products" class="seller-menu-btn" onclick="switchSellerTab('products')">
-          📦 My Products
+          📦 Product Post &amp; Inventory
+        </button>
+        <button id="seller-nav-income" class="seller-menu-btn" onclick="switchSellerTab('income')">
+          📊 Income &amp; Tubo Monitoring
         </button>
         <button id="seller-nav-shipping" class="seller-menu-btn" onclick="switchSellerTab('shipping')">
           🚚 Shipping Settings
@@ -475,101 +475,50 @@
         </div>
       </div>
 
-      <!-- TAB 2: INCOME MONITORING -->
-      <div id="seller-tab-income" class="hidden">
+      <!-- TAB 2: PRODUCT POST & INVENTORY MANAGEMENT -->
+      <div id="seller-tab-products" class="hidden">
+        <!-- MY PUBLISHED PRODUCTS LIST (TOP FOR QUICK STOCK & FREE SHIPPING MANAGEMENT) -->
         <div class="panel">
-          <div class="row-between" style="margin-bottom:0.85rem;">
+          <div class="row-between" style="margin-bottom:0.75rem;">
             <div>
-              <h3 style="margin:0;">Income &amp; Net Profit Monitoring</h3>
-              <p style="margin:0.2rem 0 0;font-size:0.8rem;color:var(--muted);">Automatic calculation of gross sales, shipping collected, and 10% platform commission.</p>
+              <h3 style="margin:0;">📦 My Posted Products, Stocks &amp; Shipping Toggle</h3>
+              <p style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--muted);">I-edit ang produkto, magdagdag ng stocks (+/-), o itakda kung alin ang <strong>Free Shipping</strong> at alin ang <strong>May Shipping Fee</strong>.</p>
             </div>
-            <button class="secondary sm" onclick="loadSellerDashboard()">↻ Refresh Analytics</button>
-          </div>
-
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <div class="kpi-label">Gross Order Volume</div>
-              <div class="kpi-value" id="inc-kpi-gross">₱0.00</div>
-              <div class="kpi-sub">All non-cancelled orders</div>
-            </div>
-            <div class="kpi-card">
-              <div class="kpi-label">Shipping Fee Collected</div>
-              <div class="kpi-value" id="inc-kpi-shipping">₱0.00</div>
-              <div class="kpi-sub">Delivery fees paid by buyers</div>
-            </div>
-            <div class="kpi-card amber-highlight">
-              <div class="kpi-label">Platform Commission (10%)</div>
-              <div class="kpi-value" id="inc-kpi-commission">-₱0.00</div>
-              <div class="kpi-sub">Admin service fee deduction</div>
-            </div>
-            <div class="kpi-card highlight">
-              <div class="kpi-label">Net Take-Home Profit</div>
-              <div class="kpi-value" id="inc-kpi-net">₱0.00</div>
-              <div class="kpi-sub">Your clean earnings after deductions</div>
+            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+              <select id="seller-prod-ship-filter" style="width:auto;font-size:0.78rem;padding:0.35rem 0.6rem;" onchange="renderSellerProductsTable()">
+                <option value="all">All Shipping Types</option>
+                <option value="free">🚚 Free Shipping Items</option>
+                <option value="paid">📦 With Shipping Fee Items</option>
+              </select>
+              <span id="seller-products-count" class="badge seller">0 Items</span>
             </div>
           </div>
 
-          <div class="income-split-grid">
-            <div class="pie-chart-wrap">
-              <canvas id="seller-income-pie-chart"></canvas>
-            </div>
-
-            <div class="deduction-ledger">
-              <h4 style="margin:0 0 0.65rem;color:var(--primary-deep);">📑 Earnings &amp; Deduction Statement</h4>
-              <div class="deduction-row">
-                <span><span class="legend-dot" style="background:#16a34a;"></span>Product Sales Subtotal</span>
-                <strong id="ledger-product-sales">₱0.00</strong>
-              </div>
-              <div class="deduction-row">
-                <span><span class="legend-dot" style="background:#0ea5e9;"></span>Delivery / Shipping Fees Collected</span>
-                <strong id="ledger-shipping-sales">₱0.00</strong>
-              </div>
-              <div class="deduction-row">
-                <span><strong>Total Gross Sales</strong></span>
-                <strong id="ledger-gross-total">₱0.00</strong>
-              </div>
-              <div class="deduction-row" style="color:var(--danger);">
-                <span><span class="legend-dot" style="background:#f59e0b;"></span>Less: Admin Commission (10%)</span>
-                <strong id="ledger-commission-deduct">-₱0.00</strong>
-              </div>
-              <div class="deduction-row total-profit-row">
-                <span>NET SELLER PROFIT</span>
-                <span id="ledger-net-profit">₱0.00</span>
-              </div>
-              <div style="margin-top:0.65rem;font-size:0.76rem;color:var(--muted);">
-                • Delivered &amp; Settled Net Profit: <strong id="ledger-delivered-net" style="color:var(--primary-dark);">₱0.00</strong><br/>
-                • Pending / In-Transit Net Profit: <strong id="ledger-pending-net" style="color:#b45309;">₱0.00</strong>
-              </div>
-            </div>
-          </div>
-
-          <h4 style="margin:1rem 0 0.4rem;">Per-Order Earnings Breakdown</h4>
           <div style="overflow-x:auto;">
             <table>
               <thead>
                 <tr>
-                  <th>Order ID</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                  <th>Payment</th>
-                  <th>Gross Total</th>
-                  <th>Admin Fee (10%)</th>
-                  <th>Net Profit</th>
+                  <th>Photo</th>
+                  <th>Product Name</th>
+                  <th>Puhunan</th>
+                  <th>Selling Price</th>
+                  <th>Net Tubo / Unit</th>
+                  <th>Shipping Option</th>
+                  <th>Stocks (Quick +/-)</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
-              <tbody id="seller-income-table-body"></tbody>
+              <tbody id="seller-products-tbody"></tbody>
             </table>
           </div>
         </div>
-      </div>
 
-      <!-- TAB 3: MY PRODUCTS -->
-      <div id="seller-tab-products" class="hidden">
-        <div class="panel">
+        <!-- ADD / EDIT PRODUCT FORM -->
+        <div class="panel" id="seller-product-form-panel">
           <div class="row-between" style="margin-bottom:0.85rem;">
             <div>
-              <h3 id="product-form-heading" style="margin:0;">Add New Product Listing</h3>
-              <p style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--muted);">Upload up to 2 crisp product photos and preview your exact net earnings after 10% commission.</p>
+              <h3 id="product-form-heading" style="margin:0;">➕ Post New Product</h3>
+              <p style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--muted);">Ilagay ang Puhunan (Capital) at Selling Price para makita agad ang malinis mong tubo pagkatapos ng 10% Admin Fee.</p>
             </div>
             <button id="cancel-edit-btn" class="secondary sm hidden" onclick="resetProductForm()">Cancel Edit</button>
           </div>
@@ -586,6 +535,10 @@
                 <select id="prod-category" required></select>
               </div>
               <div>
+                <label class="field-label">Puhunan / Capital per Unit (₱) *</label>
+                <input type="number" id="prod-cost-price" step="0.01" min="0" value="0" required placeholder="0.00" oninput="updateProductProfitPreview()" />
+              </div>
+              <div>
                 <label class="field-label">Selling Price (₱) *</label>
                 <input type="number" id="prod-price" step="0.01" min="1" required placeholder="0.00" oninput="updateProductProfitPreview()" />
               </div>
@@ -598,14 +551,26 @@
                 <input type="text" id="prod-area" placeholder="e.g. Roxas, Dangay, Bongabong, All Areas" />
               </div>
               <div>
-                <label class="field-label">Default Item Shipping Fee (₱)</label>
-                <input type="number" id="prod-shipping-fee" step="0.01" min="0" value="0" placeholder="0 = Free Shipping" />
+                <label class="field-label">Shipping Option for this Item *</label>
+                <select id="prod-is-free-ship" onchange="toggleProductShippingFeeInput()">
+                  <option value="false">📦 With Shipping Fee (Uses Item/Barangay Rate)</option>
+                  <option value="true">🚚 Free Shipping Item (₱0 Delivery Fee)</option>
+                </select>
+              </div>
+              <div id="prod-shipping-fee-wrap">
+                <label class="field-label">Item Shipping Fee Override (₱)</label>
+                <input type="number" id="prod-shipping-fee" step="0.01" min="0" value="0" placeholder="0 = Use Barangay Rate" />
               </div>
             </div>
 
             <div class="profit-preview-pill">
-              <span>💡 <strong>Seller Profit Calculator:</strong> Selling Price <strong id="prev-sell-price">₱0.00</strong> − 10% Admin Fee (<strong id="prev-comm-fee">₱0.00</strong>)</span>
-              <span>Your Net Income per Unit: <strong id="prev-net-unit" style="font-size:0.95rem;color:var(--primary-dark);">₱0.00</strong></span>
+              <span>
+                💡 <strong>Tubo Calculator:</strong>
+                Price <strong id="prev-sell-price">₱0.00</strong>
+                − Puhunan (<strong id="prev-cost-price">₱0.00</strong>)
+                − 10% Admin Fee (<strong id="prev-comm-fee">₱0.00</strong>)
+              </span>
+              <span>Malinis na Tubo / Unit: <strong id="prev-net-unit" style="font-size:0.95rem;color:var(--primary-dark);">₱0.00</strong></span>
             </div>
 
             <div style="margin-top:0.85rem;">
@@ -643,26 +608,130 @@
             </div>
           </form>
         </div>
+      </div>
 
+      <!-- TAB 3: INCOME & TUBO MONITORING + PRODUCT RATE -->
+      <div id="seller-tab-income" class="hidden">
         <div class="panel">
-          <div class="row-between">
-            <h3 style="margin:0;">My Published Products</h3>
-            <span id="seller-products-count" class="badge seller">0 Items</span>
+          <div class="row-between" style="margin-bottom:0.85rem;">
+            <div>
+              <h3 style="margin:0;">📊 Income Monitoring: Puhunan vs. Tubo &amp; Product Rate</h3>
+              <p style="margin:0.2rem 0 0;font-size:0.8rem;color:var(--muted);">Hiwalay ang puhunan, shipping income, at bawas na agad ang 10% admin fee para makita ang tunay mong kita.</p>
+            </div>
+            <button class="secondary sm" onclick="loadSellerDashboard()">↻ Refresh Analytics</button>
           </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">Product Sales (Benta)</div>
+              <div class="kpi-value" id="inc-kpi-product-sales">₱0.00</div>
+              <div class="kpi-sub">Hiwalay sa shipping fee</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Total Puhunan (Capital)</div>
+              <div class="kpi-value" id="inc-kpi-capital" style="color:#475569;">₱0.00</div>
+              <div class="kpi-sub">Babalik na kapital sa paninda</div>
+            </div>
+            <div class="kpi-card amber-highlight">
+              <div class="kpi-label">Less: Admin Fee (10%)</div>
+              <div class="kpi-value" id="inc-kpi-commission">-₱0.00</div>
+              <div class="kpi-sub">Bawas na sa kita ng seller</div>
+            </div>
+            <div class="kpi-card highlight">
+              <div class="kpi-label">Net Tubo (Clean Profit)</div>
+              <div class="kpi-value" id="inc-kpi-net-tubo">₱0.00</div>
+              <div class="kpi-sub">Product Sales − Puhunan − Admin Fee</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Shipping Income (Hiwalay)</div>
+              <div class="kpi-value" id="inc-kpi-shipping" style="color:#0284c7;">₱0.00</div>
+              <div class="kpi-sub">Nakolektang delivery fee</div>
+            </div>
+          </div>
+
+          <div class="income-split-grid">
+            <div class="pie-chart-wrap">
+              <canvas id="seller-income-pie-chart"></canvas>
+            </div>
+
+            <div class="deduction-ledger">
+              <h4 style="margin:0 0 0.65rem;color:var(--primary-deep);">📑 Puhunan, Tubo &amp; Shipping Breakdown</h4>
+              <div class="deduction-row">
+                <span><span class="legend-dot" style="background:#16a34a;"></span>Product Sales (Benta ng Produkto)</span>
+                <strong id="ledger-product-sales">₱0.00</strong>
+              </div>
+              <div class="deduction-row" style="color:#475569;">
+                <span><span class="legend-dot" style="background:#64748b;"></span>Less: Total Puhunan (Capital)</span>
+                <strong id="ledger-capital-cost">-₱0.00</strong>
+              </div>
+              <div class="deduction-row" style="color:var(--danger);">
+                <span><span class="legend-dot" style="background:#f59e0b;"></span>Less: Admin Fee (10% Commission)</span>
+                <strong id="ledger-commission-deduct">-₱0.00</strong>
+              </div>
+              <div class="deduction-row total-profit-row">
+                <span>NET TUBO SA PRODUKTO</span>
+                <span id="ledger-net-tubo">₱0.00</span>
+              </div>
+              <div class="deduction-row" style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px dashed var(--border);color:#0284c7;">
+                <span><span class="legend-dot" style="background:#0ea5e9;"></span>Hiwalay na Shipping Income</span>
+                <strong id="ledger-shipping-sales">₱0.00</strong>
+              </div>
+              <div class="deduction-row" style="font-size:0.82rem;color:var(--muted);">
+                <span>Gross Order Total (Products + Shipping):</span>
+                <strong id="ledger-gross-total">₱0.00</strong>
+              </div>
+              <div style="margin-top:0.65rem;font-size:0.76rem;color:var(--muted);">
+                • Delivered Net Tubo: <strong id="ledger-delivered-net" style="color:var(--primary-dark);">₱0.00</strong><br/>
+                • Pending / In-Transit Net Tubo: <strong id="ledger-pending-net" style="color:#b45309;">₱0.00</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- PRODUCT RATE / TOP EARNING PRODUCTS RANKING -->
+          <div style="margin-top:1.25rem;">
+            <div class="row-between" style="margin-bottom:0.45rem;">
+              <div>
+                <h4 style="margin:0;color:var(--primary-deep);">🏆 Product Rate &amp; Top Earning Products (Pinakamalaking Kita)</h4>
+                <p style="margin:0.15rem 0 0;font-size:0.78rem;color:var(--muted);">Naka-rank mula sa pinakamalaking <strong>Net Tubo</strong> at <strong>Buyer Rating</strong> para alam mo kung aling produkto ang malakas kumita.</p>
+              </div>
+            </div>
+            <div style="overflow-x:auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Product Name</th>
+                    <th>Buyer Rating</th>
+                    <th>Units Sold</th>
+                    <th>Product Sales</th>
+                    <th>Total Puhunan</th>
+                    <th>Admin Fee (10%)</th>
+                    <th>Net Tubo (Kita)</th>
+                    <th>Profit Margin</th>
+                  </tr>
+                </thead>
+                <tbody id="seller-product-rate-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PER-ORDER BREAKDOWN -->
+          <h4 style="margin:1.25rem 0 0.4rem;">Per-Order Income &amp; Deduction Statement</h4>
           <div style="overflow-x:auto;">
             <table>
               <thead>
                 <tr>
-                  <th>Photo</th>
-                  <th>Product Name</th>
-                  <th>Category</th>
-                  <th>Price</th>
-                  <th>Net / Unit</th>
-                  <th>Stock</th>
-                  <th>Actions</th>
+                  <th>Order ID</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Product Sales</th>
+                  <th>Shipping (Hiwalay)</th>
+                  <th>Puhunan</th>
+                  <th>Admin Fee (10%)</th>
+                  <th>Net Tubo</th>
                 </tr>
               </thead>
-              <tbody id="seller-products-tbody"></tbody>
+              <tbody id="seller-income-table-body"></tbody>
             </table>
           </div>
         </div>
