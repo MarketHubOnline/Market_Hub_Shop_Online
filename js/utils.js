@@ -1,5 +1,5 @@
 // =========================================================
-// SHARED UTILITY, IMAGE COMPRESSION & BUCKET UPLOAD HELPERS
+// SHARED UTILITY, IMAGE COMPRESSION & BUCKET STORAGE HELPERS
 // =========================================================
 import { supabaseClient, PLACEHOLDER_IMG } from './config.js';
 
@@ -61,7 +61,7 @@ export function compressImageToBlob(file, maxDim = 900, quality = 0.78) {
         canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
         canvas.toBlob(
-          (blob) => (blob ? resolve(blob) : reject(new Error('Compression failed'))),
+          (blob) => (blob ? resolve(blob) : reject(new Error('Image compression failed'))),
           'image/jpeg',
           quality
         );
@@ -91,4 +91,16 @@ export async function uploadCompressedImageToBucket(file, folder = 'products', m
 
   const { data } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(uniqueName);
   return data.publicUrl;
+}
+
+export async function deleteImagesFromBucket(urls = []) {
+  if (!supabaseClient || !Array.isArray(urls)) return;
+  const marker = `/object/public/${STORAGE_BUCKET}/`;
+  const filePaths = urls
+    .filter(u => typeof u === 'string' && u.includes(marker))
+    .map(u => decodeURIComponent(u.split(marker)[1]));
+
+  if (filePaths.length > 0) {
+    await supabaseClient.storage.from(STORAGE_BUCKET).remove(filePaths).catch(() => {});
+  }
 }
