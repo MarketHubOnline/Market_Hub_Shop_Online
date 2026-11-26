@@ -7,7 +7,6 @@ import {
   formatPeso,
   getProductImages,
   uploadCompressedImageToBucket,
-  deleteImagesFromBucket,
   showToast
 } from './utils.js';
 import { openAuthModal, loadUserSession } from './auth.js';
@@ -723,7 +722,14 @@ export async function deleteSellerProduct(productId) {
 
     if (error) throw error;
 
-    await deleteImagesFromBucket(urlsToRemove);
+    // Delete uploaded images directly from markethub-images bucket
+    const marker = '/object/public/markethub-images/';
+    const filePaths = urlsToRemove
+      .filter(u => typeof u === 'string' && u.includes(marker))
+      .map(u => decodeURIComponent(u.split(marker)[1]));
+    if (filePaths.length > 0) {
+      await supabaseClient.storage.from('markethub-images').remove(filePaths).catch(() => {});
+    }
 
     showToast('Product permanently deleted from database!');
     await loadMarketplaceData();
