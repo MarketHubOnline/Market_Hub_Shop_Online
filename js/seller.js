@@ -879,9 +879,11 @@ export async function saveSellerShippingAndQr(e) {
   e.preventDefault();
   if (!supabaseClient || !state.currentUser) return;
 
+  const newShopName = document.getElementById('ship-shop-name').value.trim();
+
   const payload = {
     user_id: state.currentUser.id,
-    shop_name: document.getElementById('ship-shop-name').value.trim(),
+    shop_name: newShopName,
     phone: document.getElementById('ship-shop-phone').value.trim(),
     location: document.getElementById('ship-shop-location').value.trim(),
     default_shipping_fee: Number(document.getElementById('ship-default-fee').value || 0),
@@ -893,8 +895,15 @@ export async function saveSellerShippingAndQr(e) {
   const { error } = await supabaseClient.from('sellers').upsert(payload, { onConflict: 'user_id' });
   if (error) return showToast(error.message, 'error');
 
-  showToast('Shipping rates & QR payment settings saved!');
+  // Awtomatikong i-update ang shop_name sa lahat ng existing products ng seller
+  await supabaseClient
+    .from('products')
+    .update({ shop_name: newShopName })
+    .eq('seller_id', state.currentUser.id);
+
+  showToast('Shop name, shipping rates & QR settings saved!');
   await loadUserSession();
+  await loadMarketplaceData();
   await loadSellerDashboard();
 }
 
