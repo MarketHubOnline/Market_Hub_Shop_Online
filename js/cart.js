@@ -25,9 +25,13 @@ export function addToCartById(productId, qty = 1) {
   const stock = Number(prod.stock ?? 99);
   if (stock <= 0) return showToast('This item is out of stock.', 'error');
 
+  const isFreeShip = prod.is_free_shipping === true;
   const existing = state.cart.find(c => String(c.product_id) === String(productId));
   if (existing) {
     existing.qty = Math.min(stock, existing.qty + qty);
+    existing.cost_price = Number(prod.cost_price || 0);
+    existing.is_free_shipping = isFreeShip;
+    existing.shipping_fee = isFreeShip ? 0 : Number(prod.shipping_fee || 0);
   } else {
     state.cart.push({
       product_id: prod.id,
@@ -35,7 +39,9 @@ export function addToCartById(productId, qty = 1) {
       shop_name: prod.shop_name || state.allSellers.find(s => s.user_id === prod.seller_id)?.shop_name || 'Verified Shop',
       title: prod.title,
       price: Number(prod.price),
-      shipping_fee: Number(prod.shipping_fee || 0),
+      cost_price: Number(prod.cost_price || 0),
+      is_free_shipping: isFreeShip,
+      shipping_fee: isFreeShip ? 0 : Number(prod.shipping_fee || 0),
       image_url: getProductImages(prod)[0],
       qty: Math.min(stock, qty)
     });
@@ -98,22 +104,28 @@ export function renderCartModal() {
     document.getElementById('checkout-name').value = state.currentProfile.full_name;
   }
 
-  container.innerHTML = state.cart.map((item, idx) => `
-    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.65rem 0;border-bottom:1px solid var(--border);">
-      <img src="${escapeHtml(item.image_url || PLACEHOLDER_IMG)}" alt="" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" />
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;font-size:0.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.title)}</div>
-        <div style="font-size:0.74rem;color:var(--primary-dark);font-weight:600;">🏪 ${escapeHtml(item.shop_name)}</div>
-        <div style="font-size:0.82rem;font-weight:700;margin-top:0.15rem;">${formatPeso(item.price)} × ${item.qty}</div>
+  container.innerHTML = state.cart.map((item, idx) => {
+    const isFree = item.is_free_shipping === true;
+    return `
+      <div style="display:flex;align-items:center;gap:0.75rem;padding:0.65rem 0;border-bottom:1px solid var(--border);">
+        <img src="${escapeHtml(item.image_url || PLACEHOLDER_IMG)}" alt="" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" />
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:0.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.title)}</div>
+          <div style="font-size:0.74rem;color:var(--primary-dark);font-weight:600;">
+            🏪 ${escapeHtml(item.shop_name)}
+            ${isFree ? '<span class="badge ship-free" style="margin-left:0.35rem;font-size:0.65rem;">🚚 Free Shipping</span>' : ''}
+          </div>
+          <div style="font-size:0.82rem;font-weight:700;margin-top:0.15rem;">${formatPeso(item.price)} × ${item.qty}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.35rem;">
+          <button class="secondary sm" onclick="updateCartItemQty(${idx}, -1)">−</button>
+          <span style="font-weight:700;min-width:20px;text-align:center;">${item.qty}</span>
+          <button class="secondary sm" onclick="updateCartItemQty(${idx}, 1)">+</button>
+          <button class="danger-outline sm" onclick="removeCartItem(${idx})">✕</button>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:0.35rem;">
-        <button class="secondary sm" onclick="updateCartItemQty(${idx}, -1)">−</button>
-        <span style="font-weight:700;min-width:20px;text-align:center;">${item.qty}</span>
-        <button class="secondary sm" onclick="updateCartItemQty(${idx}, 1)">+</button>
-        <button class="danger-outline sm" onclick="removeCartItem(${idx})">✕</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   renderCheckoutQrSellers();
   recalculateCartCheckoutTotals();
@@ -134,13 +146,17 @@ export function removeCartItem(idx) {
 }
 
 export function computeShippingForSellerGroup(sellerId, items, barangayInput) {
+  // Filter items that require shipping (exclude items toggled as Free Shipping by seller)
+  const chargeableItems = items.filter(i => i.is_free_shipping !== true);
+  if (chargeableItems.length === 0) return 0;
+
   const seller = state.allSellers.find(s => s.user_id === sellerId);
   const cleanBrgy = (barangayInput || '').trim().toLowerCase();
   if (cleanBrgy && Array.isArray(seller?.barangay_rates)) {
     const match = seller.barangay_rates.find(r => (r.name || '').trim().toLowerCase() === cleanBrgy);
     if (match) return Number(match.fee || 0);
   }
-  const itemMaxShip = Math.max(...items.map(i => Number(i.shipping_fee || 0)));
+  const itemMaxShip = Math.max(...chargeableItems.map(i => Number(i.shipping_fee || 0)));
   if (itemMaxShip > 0) return itemMaxShip;
   return Number(seller?.default_shipping_fee || 0);
 }
