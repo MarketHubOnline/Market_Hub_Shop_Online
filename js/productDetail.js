@@ -34,18 +34,19 @@ export function openExpandedProduct(productId) {
   document.getElementById('pdp-price').textContent = formatPeso(prod.price);
   document.getElementById('pdp-sold-count').textContent = Number(prod.sold_count || 0);
 
-  const shipFee = Number(prod.shipping_fee || 0);
+  const isFree = prod.is_free_shipping === true || Number(prod.shipping_fee || 0) === 0;
+  const shipFee = isFree ? 0 : Number(prod.shipping_fee || 0);
   const shipPill = document.getElementById('pdp-ship-pill');
-  shipPill.textContent = shipFee === 0 ? 'Free Delivery' : `Shipping: ${formatPeso(shipFee)}`;
-  shipPill.className = `badge ${shipFee === 0 ? 'ship-free' : 'ship-paid'}`;
+  shipPill.textContent = isFree ? 'Free Delivery' : `Shipping: ${formatPeso(shipFee)}`;
+  shipPill.className = `badge ${isFree ? 'ship-free' : 'ship-paid'}`;
 
-  document.getElementById('pdp-shipping-detail').textContent = shipFee === 0
+  document.getElementById('pdp-shipping-detail').textContent = isFree
     ? '₱0.00 (Free Standard Delivery)'
     : `${formatPeso(shipFee)} Base Item Shipping`;
   document.getElementById('pdp-area-detail').textContent = `Coverage: ${prod.delivery_area || seller?.location || 'All Areas'}`;
 
   const brgyRates = Array.isArray(seller?.barangay_rates) ? seller.barangay_rates : [];
-  document.getElementById('pdp-brgy-rates-preview').textContent = brgyRates.length
+  document.getElementById('pdp-brgy-rates-preview').textContent = !isFree && brgyRates.length
     ? 'Barangay Rates: ' + brgyRates.map(r => `${r.name} (${Number(r.fee) === 0 ? 'Free' : formatPeso(r.fee)})`).join(' • ')
     : '';
 
@@ -75,7 +76,7 @@ export function openExpandedProduct(productId) {
   document.getElementById('pdp-spec-category').textContent = prod.category || 'General';
   document.getElementById('pdp-spec-stock').textContent = `${stockNum} available`;
   document.getElementById('pdp-spec-area').textContent = prod.delivery_area || seller?.location || 'All Areas';
-  document.getElementById('pdp-spec-shipping').textContent = shipFee === 0 ? 'Free Delivery' : formatPeso(shipFee);
+  document.getElementById('pdp-spec-shipping').textContent = isFree ? 'Free Delivery' : formatPeso(shipFee);
   document.getElementById('pdp-description').textContent = prod.description || 'Fresh quality item from a verified MarketHub seller.';
 
   const otherShopItems = shopProducts.filter(p => String(p.id) !== String(prod.id)).slice(0, 4);
