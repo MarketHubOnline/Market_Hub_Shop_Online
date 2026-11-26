@@ -1123,6 +1123,18 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Modular ES6 Entry Point -->
-  <script type="module" src="js/chat.js"></script>
+  <!-- Auto-clear old Service Worker cache & load latest module -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister());
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+    }
+  </script>
+  <script type="module" src="js/chat.js?v=20261126"></script>
+</body>
 </body>
 </html>
