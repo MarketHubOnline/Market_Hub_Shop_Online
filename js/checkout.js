@@ -86,7 +86,8 @@ export async function placeOrder() {
       const itemsSubtotal = items.reduce((s, i) => s + Number(i.price) * Number(i.qty), 0);
       const shippingFee = computeShippingForSellerGroup(sellerId, items, barangay);
       const totalAmount = itemsSubtotal + shippingFee;
-      const adminCommission = Number((totalAmount * COMMISSION_RATE).toFixed(2));
+      // 10% Admin fee is computed on product sales subtotal (shipping is separated)
+      const adminCommission = Number((itemsSubtotal * COMMISSION_RATE).toFixed(2));
       const sellerNet = Number((totalAmount - adminCommission).toFixed(2));
       const shopName = items[0]?.shop_name || 'Seller Shop';
 
