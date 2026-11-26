@@ -12,19 +12,20 @@ let authMode = 'signin';
 
 export function openAuthModal(mode = 'signin') {
   switchAuthTab(mode);
-  document.getElementById('auth-modal').classList.remove('hidden');
+  document.getElementById('auth-modal')?.classList.remove('hidden');
 }
 
 export function closeAuthModal() {
-  document.getElementById('auth-modal').classList.add('hidden');
+  document.getElementById('auth-modal')?.classList.add('hidden');
 }
 
 export function switchAuthTab(mode) {
   authMode = mode;
-  document.getElementById('tab-signin').classList.toggle('active', mode === 'signin');
-  document.getElementById('tab-signup').classList.toggle('active', mode === 'signup');
-  document.getElementById('signup-name-wrap').classList.toggle('hidden', mode !== 'signup');
-  document.getElementById('auth-submit-btn').textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+  document.getElementById('tab-signin')?.classList.toggle('active', mode === 'signin');
+  document.getElementById('tab-signup')?.classList.toggle('active', mode === 'signup');
+  document.getElementById('signup-name-wrap')?.classList.toggle('hidden', mode !== 'signup');
+  const submitBtn = document.getElementById('auth-submit-btn');
+  if (submitBtn) submitBtn.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
 }
 
 export async function signInWithGoogle() {
@@ -97,23 +98,43 @@ export async function loadUserSession() {
   state.currentUser = session?.user || null;
 
   if (state.currentUser) {
-    let { data: prof } = await supabaseClient
+    let { data: prof, error: profErr } = await supabaseClient
       .from('profiles')
       .select('*')
       .eq('id', state.currentUser.id)
-      .single();
+      .maybeSingle();
 
-    if (!prof) {
+    if (profErr) {
+      console.error('Profile fetch error:', profErr);
+    }
+
+    if (!prof && !profErr) {
       const newProf = {
         id: state.currentUser.id,
         email: state.currentUser.email,
-        full_name: state.currentUser.user_metadata?.full_name || state.currentUser.email.split('@')[0],
+        full_name:
+          state.currentUser.user_metadata?.full_name ||
+          state.currentUser.user_metadata?.name ||
+          state.currentUser.email.split('@')[0],
         role: 'buyer'
       };
-      await supabaseClient.from('profiles').insert(newProf);
-      prof = newProf;
+      const { data: inserted } = await supabaseClient
+        .from('profiles')
+        .upsert(newProf, { onConflict: 'id' })
+        .select('*')
+        .maybeSingle();
+      prof = inserted || newProf;
     }
-    state.currentProfile = prof;
+
+    state.currentProfile = prof || {
+      id: state.currentUser.id,
+      email: state.currentUser.email,
+      full_name:
+        state.currentUser.user_metadata?.full_name ||
+        state.currentUser.user_metadata?.name ||
+        state.currentUser.email.split('@')[0],
+      role: 'buyer'
+    };
 
     const { data: sellerRec } = await supabaseClient
       .from('sellers')
@@ -134,29 +155,39 @@ export async function loadUserSession() {
 
 export function updateAuthUI() {
   const loggedIn = !!state.currentUser;
-  document.getElementById('auth-btn').classList.toggle('hidden', loggedIn);
-  document.getElementById('logout-btn').classList.toggle('hidden', !loggedIn);
-  document.getElementById('user-pill').classList.toggle('hidden', !loggedIn);
-  document.getElementById('role-badge').classList.toggle('hidden', !loggedIn);
-  document.getElementById('nav-orders-btn').classList.toggle('hidden', !loggedIn);
-  document.getElementById('nav-chat-btn').classList.toggle('hidden', !loggedIn);
-  document.getElementById('notif-wrapper').classList.toggle('hidden', !loggedIn);
+  document.getElementById('auth-btn')?.classList.toggle('hidden', loggedIn);
+  document.getElementById('logout-btn')?.classList.toggle('hidden', !loggedIn);
+  document.getElementById('user-pill')?.classList.toggle('hidden', !loggedIn);
+  document.getElementById('role-badge')?.classList.toggle('hidden', !loggedIn);
+  document.getElementById('nav-orders-btn')?.classList.toggle('hidden', !loggedIn);
+  document.getElementById('nav-chat-btn')?.classList.toggle('hidden', !loggedIn);
+  document.getElementById('notif-wrapper')?.classList.toggle('hidden', !loggedIn);
 
-  const role = state.currentProfile?.role || 'buyer';
+  const role = String(state.currentProfile?.role || 'buyer').trim().toLowerCase();
   const isApprovedSeller = role === 'seller' || state.currentSellerRecord?.status === 'approved';
   const isAdmin = role === 'admin';
 
-  document.getElementById('nav-seller-btn').classList.toggle('hidden', !(loggedIn && (isApprovedSeller || isAdmin)));
-  document.getElementById('nav-apply-seller-btn').classList.toggle('hidden', !(loggedIn && !isApprovedSeller && !isAdmin));
-  document.getElementById('nav-admin-btn').classList.toggle('hidden', !(loggedIn && isAdmin));
+  document.getElementById('nav-seller-btn')?.classList.toggle('hidden', !(loggedIn && (isApprovedSeller || isAdmin)));
+  document.getElementById('nav-apply-seller-btn')?.classList.toggle('hidden', !(loggedIn && !isApprovedSeller && !isAdmin));
+  document.getElementById('nav-admin-btn')?.classList.toggle('hidden', !(loggedIn && isAdmin));
 
   if (loggedIn) {
-    const display = state.currentProfile?.full_name || state.currentUser.email.split('@')[0];
-    document.getElementById('user-display-name').textContent = display;
-    document.getElementById('user-avatar-initial').textContent = display.charAt(0).toUpperCase();
+    const display =
+      state.currentProfile?.full_name ||
+      state.currentUser.user_metadata?.full_name ||
+      state.currentUser.user_metadata?.name ||
+      state.currentUser.email.split('@')[0];
+
+    const nameEl = document.getElementById('user-display-name');
+    const avatarEl = document.getElementById('user-avatar-initial');
+    if (nameEl) nameEl.textContent = display;
+    if (avatarEl) avatarEl.textContent = display.charAt(0).toUpperCase();
+
     const badge = document.getElementById('role-badge');
-    badge.textContent = isAdmin ? 'admin' : (isApprovedSeller ? 'seller' : 'buyer');
-    badge.className = `badge ${isAdmin ? 'admin' : (isApprovedSeller ? 'seller' : '')}`;
+    if (badge) {
+      badge.textContent = isAdmin ? 'ADMIN' : (isApprovedSeller ? 'SELLER' : 'BUYER');
+      badge.className = `badge ${isAdmin ? 'admin' : (isApprovedSeller ? 'seller' : '')}`;
+    }
   }
   updateCartBadge();
 }
