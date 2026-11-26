@@ -131,10 +131,10 @@ export function loadDemoFallbackData() {
     { id: 'demo-s2', user_id: 'u2', shop_name: 'Mindoro Gadget Hub', location: 'Roxas Town Center', phone: '0918-555-0202', status: 'approved', default_shipping_fee: 50, barangay_rates: [{ name: 'Roxas', fee: 30 }, { name: 'Bongabong', fee: 60 }] }
   ];
   state.allProducts = [
-    { id: 'demo-p1', seller_id: 'u1', shop_name: 'Dangay Fresh Harvest', title: 'Fresh Bell Pepper Sultan F1 (1kg Pack)', category: 'Fresh Produce & Farm', price: 140, stock: 35, sold_count: 84, shipping_fee: 0, delivery_area: 'Roxas & Neighboring Towns', description: 'Crisp, thick-walled lowland bell peppers harvested fresh every morning in Brgy. Dangay.', image_url: '' },
-    { id: 'demo-p2', seller_id: 'u2', shop_name: 'Mindoro Gadget Hub', title: '65W GaN Fast Charger + Braided Type-C Cable', category: 'Gadgets & Accessories', price: 650, stock: 18, sold_count: 42, shipping_fee: 0, delivery_area: 'All Areas', description: 'High-speed 65W dual-port GaN charger with thermal protection for smartphones and laptops.', image_url: '' },
-    { id: 'demo-p3', seller_id: 'u1', shop_name: 'Dangay Fresh Harvest', title: 'Farm-Fresh Sili Panigang & Sitaw Bundle', category: 'Fresh Produce & Farm', price: 65, stock: 50, sold_count: 120, shipping_fee: 20, delivery_area: 'Roxas, Oriental Mindoro', description: 'Newly picked green chili and crisp string beans packed same day.', image_url: '' },
-    { id: 'demo-p4', seller_id: 'u2', shop_name: 'Mindoro Gadget Hub', title: 'Gaming Phone Cooler Magnetic Radiator RGB', category: 'Smartphones & Tablets', price: 580, stock: 12, sold_count: 29, shipping_fee: 45, delivery_area: 'All Areas', description: 'Instant semiconductor cooling plate for lag-free mobile gaming sessions.', image_url: '' }
+    { id: 'demo-p1', seller_id: 'u1', shop_name: 'Dangay Fresh Harvest', title: 'Fresh Bell Pepper Sultan F1 (1kg Pack)', category: 'Fresh Produce & Farm', cost_price: 95, price: 140, stock: 35, sold_count: 84, is_free_shipping: true, shipping_fee: 0, delivery_area: 'Roxas & Neighboring Towns', description: 'Crisp, thick-walled lowland bell peppers harvested fresh every morning in Brgy. Dangay.', image_url: '' },
+    { id: 'demo-p2', seller_id: 'u2', shop_name: 'Mindoro Gadget Hub', title: '65W GaN Fast Charger + Braided Type-C Cable', category: 'Gadgets & Accessories', cost_price: 420, price: 650, stock: 18, sold_count: 42, is_free_shipping: true, shipping_fee: 0, delivery_area: 'All Areas', description: 'High-speed 65W dual-port GaN charger with thermal protection for smartphones and laptops.', image_url: '' },
+    { id: 'demo-p3', seller_id: 'u1', shop_name: 'Dangay Fresh Harvest', title: 'Farm-Fresh Sili Panigang & Sitaw Bundle', category: 'Fresh Produce & Farm', cost_price: 40, price: 65, stock: 50, sold_count: 120, is_free_shipping: false, shipping_fee: 20, delivery_area: 'Roxas, Oriental Mindoro', description: 'Newly picked green chili and crisp string beans packed same day.', image_url: '' },
+    { id: 'demo-p4', seller_id: 'u2', shop_name: 'Mindoro Gadget Hub', title: 'Gaming Phone Cooler Magnetic Radiator RGB', category: 'Smartphones & Tablets', cost_price: 380, price: 580, stock: 12, sold_count: 29, is_free_shipping: false, shipping_fee: 45, delivery_area: 'All Areas', description: 'Instant semiconductor cooling plate for lag-free mobile gaming sessions.', image_url: '' }
   ];
   renderVerifiedShops();
   renderProducts();
@@ -222,9 +222,10 @@ export function renderProducts() {
   const inStockOnly = document.getElementById('filter-in-stock')?.checked;
 
   let filtered = state.allProducts.filter(p => {
+    const isFree = p.is_free_shipping === true || Number(p.shipping_fee || 0) === 0;
     if (state.selectedCategory !== 'All Categories' && p.category !== state.selectedCategory) return false;
     if (state.selectedShopId !== 'all' && p.seller_id !== state.selectedShopId) return false;
-    if (freeShipOnly && Number(p.shipping_fee || 0) > 0) return false;
+    if (freeShipOnly && !isFree) return false;
     if (inStockOnly && Number(p.stock || 0) <= 0) return false;
     if (q) {
       const hay = `${p.title || ''} ${p.category || ''} ${p.shop_name || ''} ${p.description || ''} ${p.delivery_area || ''}`.toLowerCase();
@@ -256,7 +257,7 @@ export function renderProducts() {
     const imgs = getProductImages(p);
     const stockNum = Number(p.stock ?? 99);
     const outOfStock = stockNum <= 0;
-    const freeShip = Number(p.shipping_fee || 0) === 0;
+    const freeShip = p.is_free_shipping === true || Number(p.shipping_fee || 0) === 0;
     const shopName = p.shop_name || state.allSellers.find(s => s.user_id === p.seller_id)?.shop_name || 'Verified Shop';
 
     return `
