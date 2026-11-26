@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MarketHub — Fresh Local Market &amp; Gadgets</title>
+
+  <!-- PWA & Mobile App Manifest + Theme -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#16a34a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MarketHub" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+
+  <!-- Modular Stylesheets -->
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/marketplace.css" />
+  <link rel="stylesheet" href="css/dashboards.css" />
+
+  <!-- External Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- =========================================================
+       FRESH GRASS GREEN TOP NAVIGATION HEADER
+       ========================================================= -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="header-top-links">
+        <div class="top-link-group">
+          <button class="top-link-btn" onclick="switchView('marketplace')">Marketplace</button>
+          <span class="top-sep">|</span>
+          <button id="nav-seller-btn" class="top-link-btn hidden" onclick="switchView('seller')">Seller Centre</button>
+          <button id="nav-apply-seller-btn" class="top-link-btn hidden" onclick="openSellerApplyModal()">Start Selling</button>
+          <button id="nav-admin-btn" class="top-link-btn hidden" onclick="switchView('admin')">Admin Panel</button>
+          <button id="nav-orders-btn" class="top-link-btn hidden" onclick="switchView('orders')">My Purchases</button>
+          <button id="nav-chat-btn" class="top-link-btn hidden" onclick="openChatHub()">
+            💬 Messages <span id="header-chat-badge" class="notif-badge hidden">0</span>
+          </button>
+          <button id="pwa-install-btn" class="top-link-btn hidden" onclick="triggerPwaInstall()" style="background:rgba(255,255,255,0.22);border:1px solid rgba(255,255,255,0.4);">📲 Install App</button>
+        </div>
+
+        <div class="top-link-group">
+          <div id="notif-wrapper" class="notif-wrapper hidden">
+            <button id="notif-toggle-btn" class="notif-btn" onclick="toggleNotifDropdown(event)" title="Notifications">
+              🔔 Notifications <span id="notif-badge" class="notif-badge hidden">0</span>
+            </button>
+            <div id="notif-dropdown" class="notif-dropdown hidden" onclick="event.stopPropagation()">
+              <div class="notif-header">
+                <h4>Notifications</h4>
+                <button class="secondary sm" onclick="markAllNotificationsRead()">Mark all read</button>
+              </div>
+              <div id="notif-list" class="notif-list">
+                <div style="padding:1rem;text-align:center;color:var(--muted);font-size:0.82rem;">No notifications yet.</div>
+              </div>
+            </div>
+          </div>
+
+          <span id="user-pill" class="user-pill hidden" onclick="switchView('orders')" title="View My Account & Purchases">
+            <span class="user-avatar-dot" id="user-avatar-initial">U</span>
+            <span id="user-display-name">User</span>
+          </span>
+          <span id="role-badge" class="badge hidden">guest</span>
+          <button id="auth-btn" class="top-link-btn" style="font-weight:700;" onclick="openAuthModal('signin')">Sign Up / Login</button>
+          <button id="logout-btn" class="top-link-btn hidden" onclick="signOut()">Logout</button>
+        </div>
+      </div>
+
+      <div class="header-main-row">
+        <div class="brand" onclick="clearShopFilter(); switchView('marketplace');">
+          <span class="brand-icon">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+          </span>
+          <span>MarketHub</span>
+        </div>
+
+        <div class="header-search-wrap">
+          <div class="header-search-box">
+            <input type="text" id="search-input" placeholder="Search fresh vegetables, smartphones, gadgets, local shops..." oninput="handleHeaderSearchInput()" onkeydown="if(event.key==='Enter'){triggerHeaderSearch();}" />
+            <button class="header-search-btn" onclick="triggerHeaderSearch()" aria-label="Search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </button>
+          </div>
+          <div class="header-quick-tags">
+            <span onclick="quickTagSearch('')">All Items</span>
+            <span onclick="quickTagCategory('Fresh Produce & Farm')">🥬 Fresh Produce</span>
+            <span onclick="quickTagCategory('Smartphones & Tablets')">📱 Smartphones</span>
+            <span onclick="quickTagCategory('Gadgets & Accessories')">🎧 Gadgets</span>
+            <span onclick="quickTagCategory('Groceries & Pantry')">🌾 Local Pantry</span>
+            <span onclick="quickTagCategory('Home & Living')">🏡 Home &amp; Living</span>
+            <span onclick="quickTagFreeShip()">🚚 Free Delivery</span>
+          </div>
+        </div>
+
+        <div class="header-right-icons">
+          <button class="header-cart-btn" onclick="openCartModal()" title="Shopping Cart">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+            <span id="cart-count" class="header-cart-badge">0</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="global-error" class="error-box hidden"></div>
+
+    <!-- =========================================================
+         VIEW 1: MARKETPLACE
+         ========================================================= -->
+    <section id="view-marketplace">
+      <div id="hero-showcase-banner" class="hero-showcase">
+        <div>
+          <div class="hero-pill">🌿 FARM-FRESH HARVESTS &amp; TECH DEALS</div>
+          <h1 class="hero-title">Fresh Local Produce &amp; Everyday Gadgets in One Green Marketplace</h1>
+          <p class="hero-sub">Shop crisp vegetables straight from local growers alongside trusted smartphones, accessories, and daily essentials with transparent barangay delivery rates.</p>
+          <div class="hero-actions">
+            <button class="hero-btn-light" onclick="quickTagCategory('Fresh Produce & Farm')">🥬 Shop Fresh Harvests</button>
+            <button class="hero-btn-glass" onclick="quickTagCategory('Smartphones & Tablets')">📱 Browse Gadgets</button>
+          </div>
+        </div>
+
+        <div class="hero-visual-grid">
+          <div class="hero-float-card" onclick="quickTagCategory('Fresh Produce & Farm')">
+            <div class="hero-float-icon">🥬🍅</div>
+            <div class="hero-float-title">Farm &amp; Produce</div>
+            <div class="hero-float-desc">Harvested fresh daily</div>
+          </div>
+          <div class="hero-float-card" onclick="quickTagCategory('Smartphones & Tablets')">
+            <div class="hero-float-icon">📱⚡</div>
+            <div class="hero-float-title">Phones &amp; Tablets</div>
+            <div class="hero-float-desc">Verified local sellers</div>
+          </div>
+          <div class="hero-float-card" onclick="quickTagCategory('Gadgets & Accessories')">
+            <div class="hero-float-icon">🎧⌚</div>
+            <div class="hero-float-title">Audio &amp; Gadgets</div>
+            <div class="hero-float-desc">Chargers, buds &amp; gear</div>
+          </div>
+          <div class="hero-float-card" onclick="quickTagFreeShip()">
+            <div class="hero-float-icon">🚚💚</div>
+            <div class="hero-float-title">Free Shipping Deals</div>
+            <div class="hero-float-desc">Zero delivery fee items</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="mall-shops-section" class="mall-section">
+        <div class="mall-header">
+          <div class="mall-title">
+            <span>VERIFIED LOCAL SHOPS</span>
+            <span style="color:var(--border);">|</span>
+            <span style="font-size:0.78rem;color:var(--text-secondary);font-weight:600;">🌱 Direct Growers &amp; Trusted Gadget Stores</span>
+          </div>
+          <button id="clear-shop-top-btn" class="text-link-btn hidden" onclick="clearShopFilter()">View All Shops &gt;</button>
+        </div>
+        <div id="mall-shops-list" class="mall-shops-grid">
+          <div style="font-size:0.82rem;color:var(--muted);padding:0.5rem;">Loading verified shops...</div>
+        </div>
+      </div>
+
+      <div id="selected-shop-banner" class="selected-shop-banner hidden">
+        <div style="display:flex;align-items:center;gap:0.85rem;">
+          <div id="selected-shop-avatar" class="pdp-shop-avatar" style="width:48px;height:48px;font-size:1.15rem;">S</div>
+          <div>
+            <div style="font-size:0.72rem;font-weight:700;color:var(--primary-dark);text-transform:uppercase;letter-spacing:0.04em;">Verified Storefront</div>
+            <h3 id="selected-shop-title" style="margin:0.1rem 0 0;font-size:1.1rem;color:var(--text);">Shop Name</h3>
+            <p id="selected-shop-sub" style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--text-secondary);">Showing all products from this seller</p>
+          </div>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <button id="selected-shop-chat-btn" class="secondary sm" onclick="openSelectedShopChat()">💬 Chat Seller</button>
+          <button class="secondary sm" onclick="clearShopFilter()">← Back to All Shops</button>
+        </div>
+      </div>
+
+      <div id="mobile-cat-strip" class="mobile-cat-strip"></div>
+
+      <div class="marketplace-layout">
+        <aside class="category-sidebar">
+          <div class="sidebar-block">
+            <div class="sidebar-heading">☰ All Categories</div>
+            <div id="sidebar-cat-list" class="sidebar-cat-list"></div>
+          </div>
+
+          <div class="sidebar-block">
+            <div class="sidebar-heading">🔍 Search Filter</div>
+            <div style="font-size:0.75rem;font-weight:700;color:var(--muted);margin-bottom:0.35rem;">Shipping &amp; Promos</div>
+            <label class="sidebar-filter-check">
+              <input type="checkbox" id="filter-free-ship" onchange="renderProducts()" />
+              <span>Free Shipping Only</span>
+            </label>
+            <label class="sidebar-filter-check">
+              <input type="checkbox" id="filter-in-stock" onchange="renderProducts()" />
+              <span>In Stock Only</span>
+            </label>
+          </div>
+
+          <div class="sidebar-block">
+            <div style="font-size:0.75rem;font-weight:700;color:var(--muted);margin-bottom:0.35rem;">Filter by Shop</div>
+            <select id="shop-filter" onchange="handleShopDropdownChange()" style="font-size:0.78rem;padding:0.4rem;">
+              <option value="all">All Verified Shops</option>
+            </select>
+          </div>
+
+          <button class="secondary sm" style="width:100%;" onclick="resetAllMarketplaceFilters()">Reset Filters</button>
+        </aside>
+
+        <div>
+          <div class="sort-bar">
+            <div class="sort-options">
+              <span class="sort-label">Sort By</span>
+              <button class="sort-btn active" id="sort-btn-popular" onclick="setSortMode('popular')">Popular</button>
+              <button class="sort-btn" id="sort-btn-latest" onclick="setSortMode('latest')">Latest</button>
+              <button class="sort-btn" id="sort-btn-sales" onclick="setSortMode('sales')">Top Sales</button>
+              <select id="price-sort-select" class="sort-select" onchange="setPriceSort(this.value)">
+                <option value="">Price: Default</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+              </select>
+            </div>
+            <div id="results-counter" style="font-size:0.78rem;color:var(--text-secondary);font-weight:600;">Showing 0 items</div>
+          </div>
+
+          <div id="products-grid" class="grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         VIEW 1B: FULL PRODUCT DETAIL PAGE
+         ========================================================= -->
+    <section id="view-product-detail" class="hidden">
+      <div class="pdp-breadcrumb">
+        <div class="pdp-crumb-trail">
+          <span class="pdp-crumb-link" onclick="closeExpandedProduct()">MarketHub</span>
+          <span>&gt;</span>
+          <span id="pdp-crumb-category" class="pdp-crumb-link" onclick="filterByPdpCategory()">Category</span>
+          <span>&gt;</span>
+          <span id="pdp-crumb-shop" class="pdp-crumb-link" onclick="filterByPdpShop()">Shop</span>
+          <span>&gt;</span>
+          <span id="pdp-crumb-title" style="color:var(--text);font-weight:600;">Product</span>
+        </div>
+        <button class="secondary sm" onclick="closeExpandedProduct()">← Back to Products</button>
+      </div>
+
+      <div class="pdp-main-card">
+        <div class="pdp-gallery-col">
+          <div class="pdp-gallery-main">
+            <img id="pdp-main-image" src="" alt="Product Image" />
+          </div>
+          <div id="pdp-thumbs" class="pdp-thumbs"></div>
+        </div>
+
+        <div>
+          <div class="pdp-title-row">
+            <span class="pdp-mall-pill">VERIFIED</span>
+            <h1 id="pdp-title" class="pdp-title">Product Title</h1>
+          </div>
+
+          <div class="pdp-stats-bar">
+            <div class="pdp-stat-item">
+              <strong id="pdp-rating-score" style="color:var(--primary-dark);border-bottom:1px solid var(--primary-dark);">0.0</strong>
+              <span id="pdp-rating-stars" style="color:#f59e0b;">☆☆☆☆☆</span>
+            </div>
+            <div class="pdp-stat-divider"></div>
+            <div class="pdp-stat-item">
+              <strong id="pdp-rating-count" style="color:var(--text);border-bottom:1px solid var(--text);">0</strong>
+              <span>Ratings</span>
+            </div>
+            <div class="pdp-stat-divider"></div>
+            <div class="pdp-stat-item">
+              <strong id="pdp-sold-count" style="color:var(--text);">0</strong>
+              <span>Sold</span>
+            </div>
+          </div>
+
+          <div class="pdp-price-box">
+            <div id="pdp-price" class="pdp-price-val">₱0.00</div>
+            <span id="pdp-ship-pill" class="badge ship-free">Free Delivery</span>
+          </div>
+
+          <div class="pdp-meta-table">
+            <div class="pdp-meta-row">
+              <span class="pdp-meta-label">Delivery Info</span>
+              <div>
+                <div id="pdp-shipping-detail" style="font-weight:600;color:var(--text);">Standard Delivery</div>
+                <div id="pdp-area-detail" style="font-size:0.78rem;color:var(--muted);margin-top:0.15rem;">Coverage: All Areas</div>
+                <div id="pdp-brgy-rates-preview" style="font-size:0.76rem;color:var(--primary-dark);margin-top:0.2rem;"></div>
+              </div>
+            </div>
+
+            <div class="pdp-meta-row">
+              <span class="pdp-meta-label">Quantity</span>
+              <div style="display:flex;align-items:center;gap:0.85rem;flex-wrap:wrap;">
+                <div class="qty-stepper">
+                  <button type="button" onclick="adjustPdpQty(-1)">−</button>
+                  <input type="number" id="pdp-qty" value="1" min="1" onchange="clampPdpQty()" />
+                  <button type="button" onclick="adjustPdpQty(1)">+</button>
+                </div>
+                <span id="pdp-stock-label" style="font-size:0.8rem;color:var(--muted);">0 pieces available</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pdp-cta-row">
+            <button id="pdp-add-cart-btn" class="add-cart-outline" onclick="addFromPdpToCart()">
+              🛒 Add To Cart
+            </button>
+            <button id="pdp-buy-now-btn" class="shop-cta" onclick="buyNowFromPdp()">
+              ⚡ Buy Now
+            </button>
+            <button id="pdp-chat-btn" class="secondary" onclick="openChatFromPdp()">
+              💬 Chat Seller
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pdp-shop-bar">
+        <div class="pdp-shop-left">
+          <div id="pdp-shop-avatar" class="pdp-shop-avatar">S</div>
+          <div>
+            <div style="font-weight:700;font-size:0.98rem;color:var(--text);" id="pdp-shop-name">Seller Shop</div>
+            <div style="font-size:0.76rem;color:var(--primary-dark);font-weight:600;margin-top:0.1rem;">● Verified Local Store</div>
+            <div style="display:flex;gap:0.45rem;margin-top:0.45rem;flex-wrap:wrap;">
+              <button class="add-cart-outline sm" onclick="filterByPdpShop()">🏪 View Shop</button>
+              <button class="secondary sm" onclick="openChatFromPdp()">💬 Chat Now</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pdp-shop-stats">
+          <div class="pdp-shop-stat-col">
+            <span>Shop Ratings</span>
+            <strong id="pdp-shop-rating-stat">0.0 ★</strong>
+          </div>
+          <div class="pdp-shop-stat-col">
+            <span>Products</span>
+            <strong id="pdp-shop-products-stat">0</strong>
+          </div>
+          <div class="pdp-shop-stat-col">
+            <span>Total Units Sold</span>
+            <strong id="pdp-shop-sold-stat">0</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="pdp-bottom-grid">
+        <div>
+          <div class="pdp-section-card">
+            <h3 class="pdp-section-heading">Product Specifications</h3>
+            <div class="pdp-spec-row">
+              <span class="pdp-spec-label">Category</span>
+              <span id="pdp-spec-category" style="color:var(--primary-dark);font-weight:600;">General</span>
+            </div>
+            <div class="pdp-spec-row">
+              <span class="pdp-spec-label">Stock</span>
+              <span id="pdp-spec-stock">0</span>
+            </div>
+            <div class="pdp-spec-row">
+              <span class="pdp-spec-label">Delivery Coverage</span>
+              <span id="pdp-spec-area">All Areas</span>
+            </div>
+            <div class="pdp-spec-row">
+              <span class="pdp-spec-label">Shipping Fee</span>
+              <span id="pdp-spec-shipping">Free Shipping</span>
+            </div>
+
+            <h3 class="pdp-section-heading" style="margin-top:1.15rem;">Product Description</h3>
+            <div id="pdp-description" class="pdp-description-text">No detailed description provided.</div>
+          </div>
+
+          <div class="pdp-section-card">
+            <h3 class="pdp-section-heading">Product Ratings &amp; Buyer Reviews</h3>
+            <div class="rating-overview-box">
+              <div class="rating-big-score">
+                <div><span class="num" id="pdp-review-big-num">0.0</span> <span style="font-size:0.9rem;">out of 5</span></div>
+                <div id="pdp-review-big-stars" style="color:#f59e0b;font-size:1.1rem;margin-top:0.2rem;">☆☆☆☆☆</div>
+              </div>
+              <div class="rating-filter-pills">
+                <button class="rating-filter-btn active" id="rev-filter-all" onclick="setReviewStarFilter('all')">All</button>
+                <button class="rating-filter-btn" id="rev-filter-5" onclick="setReviewStarFilter(5)">5 Star</button>
+                <button class="rating-filter-btn" id="rev-filter-4" onclick="setReviewStarFilter(4)">4 Star</button>
+                <button class="rating-filter-btn" id="rev-filter-3" onclick="setReviewStarFilter(3)">3 Star</button>
+                <button class="rating-filter-btn" id="rev-filter-2" onclick="setReviewStarFilter(2)">2 Star</button>
+                <button class="rating-filter-btn" id="rev-filter-1" onclick="setReviewStarFilter(1)">1 Star</button>
+              </div>
+            </div>
+
+            <div id="pdp-reviews-list"></div>
+          </div>
+        </div>
+
+        <aside class="top-picks-card">
+          <div class="top-picks-title">Top Picks From Shop</div>
+          <div id="pdp-top-picks-list">
+            <div style="font-size:0.78rem;color:var(--muted);">No other items in shop.</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         VIEW 2: SELLER CENTRE
+         ========================================================= -->
+    <section id="view-seller" class="hidden">
+      <div class="row-between" style="margin-bottom:0.85rem;">
+        <div>
+          <h2 style="margin:0;color:var(--primary-deep);">🏪 Seller Centre</h2>
+          <p id="seller-shop-subtitle" style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Manage your store orders, income analytics, products, and delivery rates.</p>
+        </div>
+        <button class="secondary sm" onclick="switchView('marketplace')">← Back to Marketplace</button>
+      </div>
+
+      <div class="seller-menu-bar">
+        <button id="seller-nav-home" class="seller-menu-btn active" onclick="switchSellerTab('home')">
+          🏠 My Home
+        </button>
+        <button id="seller-nav-income" class="seller-menu-btn" onclick="switchSellerTab('income')">
+          📊 Income Monitoring
+        </button>
+        <button id="seller-nav-products" class="seller-menu-btn" onclick="switchSellerTab('products')">
+          📦 My Products
+        </button>
+        <button id="seller-nav-shipping" class="seller-menu-btn" onclick="switchSellerTab('shipping')">
+          🚚 Shipping Settings
+        </button>
+      </div>
+
+      <!-- TAB 1: MY HOME -->
+      <div id="seller-tab-home">
+        <div class="kpi-grid">
+          <div class="kpi-card amber-highlight">
+            <div class="kpi-label">To Process / Pending</div>
+            <div class="kpi-value" id="seller-kpi-pending">0</div>
+            <div class="kpi-sub">Orders awaiting action</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Confirmed &amp; Shipping</div>
+            <div class="kpi-value" id="seller-kpi-active">0</div>
+            <div class="kpi-sub">In preparation or transit</div>
+          </div>
+          <div class="kpi-card highlight">
+            <div class="kpi-label">Delivered Orders</div>
+            <div class="kpi-value" id="seller-kpi-delivered">0</div>
+            <div class="kpi-sub">Completed customer deliveries</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Active Listings</div>
+            <div class="kpi-value" id="seller-kpi-listings">0</div>
+            <div class="kpi-sub">Published items in shop</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="row-between">
+            <div>
+              <h3 style="margin:0;">Incoming Customer Orders</h3>
+              <p style="margin:0.2rem 0 0;font-size:0.8rem;color:var(--muted);">Verify QR payments, update delivery status, chat buyers, and print official delivery receipts.</p>
+            </div>
+            <select id="seller-order-status-filter" style="width:auto;font-size:0.82rem;" onchange="renderSellerOrders()">
+              <option value="all">All Order Statuses</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="shipped">Shipped</option>
+              <option value="delivered">Delivered</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div id="seller-orders-list" style="margin-top:0.85rem;"></div>
+        </div>
+      </div>
+
+      <!-- TAB 2: INCOME MONITORING -->
+      <div id="seller-tab-income" class="hidden">
+        <div class="panel">
+          <div class="row-between" style="margin-bottom:0.85rem;">
+            <div>
+              <h3 style="margin:0;">Income &amp; Net Profit Monitoring</h3>
+              <p style="margin:0.2rem 0 0;font-size:0.8rem;color:var(--muted);">Automatic calculation of gross sales, shipping collected, and 10% platform commission.</p>
+            </div>
+            <button class="secondary sm" onclick="loadSellerDashboard()">↻ Refresh Analytics</button>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">Gross Order Volume</div>
+              <div class="kpi-value" id="inc-kpi-gross">₱0.00</div>
+              <div class="kpi-sub">All non-cancelled orders</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Shipping Fee Collected</div>
+              <div class="kpi-value" id="inc-kpi-shipping">₱0.00</div>
+              <div class="kpi-sub">Delivery fees paid by buyers</div>
+            </div>
+            <div class="kpi-card amber-highlight">
+              <div class="kpi-label">Platform Commission (10%)</div>
+              <div class="kpi-value" id="inc-kpi-commission">-₱0.00</div>
+              <div class="kpi-sub">Admin service fee deduction</div>
+            </div>
+            <div class="kpi-card highlight">
+              <div class="kpi-label">Net Take-Home Profit</div>
+              <div class="kpi-value" id="inc-kpi-net">₱0.00</div>
+              <div class="kpi-sub">Your clean earnings after deductions</div>
+            </div>
+          </div>
+
+          <div class="income-split-grid">
+            <div class="pie-chart-wrap">
+              <canvas id="seller-income-pie-chart"></canvas>
+            </div>
+
+            <div class="deduction-ledger">
+              <h4 style="margin:0 0 0.65rem;color:var(--primary-deep);">📑 Earnings &amp; Deduction Statement</h4>
+              <div class="deduction-row">
+                <span><span class="legend-dot" style="background:#16a34a;"></span>Product Sales Subtotal</span>
+                <strong id="ledger-product-sales">₱0.00</strong>
+              </div>
+              <div class="deduction-row">
+                <span><span class="legend-dot" style="background:#0ea5e9;"></span>Delivery / Shipping Fees Collected</span>
+                <strong id="ledger-shipping-sales">₱0.00</strong>
+              </div>
+              <div class="deduction-row">
+                <span><strong>Total Gross Sales</strong></span>
+                <strong id="ledger-gross-total">₱0.00</strong>
+              </div>
+              <div class="deduction-row" style="color:var(--danger);">
+                <span><span class="legend-dot" style="background:#f59e0b;"></span>Less: Admin Commission (10%)</span>
+                <strong id="ledger-commission-deduct">-₱0.00</strong>
+              </div>
+              <div class="deduction-row total-profit-row">
+                <span>NET SELLER PROFIT</span>
+                <span id="ledger-net-profit">₱0.00</span>
+              </div>
+              <div style="margin-top:0.65rem;font-size:0.76rem;color:var(--muted);">
+                • Delivered &amp; Settled Net Profit: <strong id="ledger-delivered-net" style="color:var(--primary-dark);">₱0.00</strong><br/>
+                • Pending / In-Transit Net Profit: <strong id="ledger-pending-net" style="color:#b45309;">₱0.00</strong>
+              </div>
+            </div>
+          </div>
+
+          <h4 style="margin:1rem 0 0.4rem;">Per-Order Earnings Breakdown</h4>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Payment</th>
+                  <th>Gross Total</th>
+                  <th>Admin Fee (10%)</th>
+                  <th>Net Profit</th>
+                </tr>
+              </thead>
+              <tbody id="seller-income-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: MY PRODUCTS -->
+      <div id="seller-tab-products" class="hidden">
+        <div class="panel">
+          <div class="row-between" style="margin-bottom:0.85rem;">
+            <div>
+              <h3 id="product-form-heading" style="margin:0;">Add New Product Listing</h3>
+              <p style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--muted);">Upload up to 2 crisp product photos and preview your exact net earnings after 10% commission.</p>
+            </div>
+            <button id="cancel-edit-btn" class="secondary sm hidden" onclick="resetProductForm()">Cancel Edit</button>
+          </div>
+
+          <form id="product-form" onsubmit="saveProduct(event)">
+            <input type="hidden" id="edit-product-id" />
+            <div class="form-grid">
+              <div>
+                <label class="field-label">Product Name *</label>
+                <input type="text" id="prod-title" required placeholder="e.g. Fresh Bell Pepper Sultan F1 (1kg)" />
+              </div>
+              <div>
+                <label class="field-label">Category *</label>
+                <select id="prod-category" required></select>
+              </div>
+              <div>
+                <label class="field-label">Selling Price (₱) *</label>
+                <input type="number" id="prod-price" step="0.01" min="1" required placeholder="0.00" oninput="updateProductProfitPreview()" />
+              </div>
+              <div>
+                <label class="field-label">Available Stock *</label>
+                <input type="number" id="prod-stock" min="0" required placeholder="20" />
+              </div>
+              <div>
+                <label class="field-label">Delivery Coverage Area</label>
+                <input type="text" id="prod-area" placeholder="e.g. Roxas, Dangay, Bongabong, All Areas" />
+              </div>
+              <div>
+                <label class="field-label">Default Item Shipping Fee (₱)</label>
+                <input type="number" id="prod-shipping-fee" step="0.01" min="0" value="0" placeholder="0 = Free Shipping" />
+              </div>
+            </div>
+
+            <div class="profit-preview-pill">
+              <span>💡 <strong>Seller Profit Calculator:</strong> Selling Price <strong id="prev-sell-price">₱0.00</strong> − 10% Admin Fee (<strong id="prev-comm-fee">₱0.00</strong>)</span>
+              <span>Your Net Income per Unit: <strong id="prev-net-unit" style="font-size:0.95rem;color:var(--primary-dark);">₱0.00</strong></span>
+            </div>
+
+            <div style="margin-top:0.85rem;">
+              <label class="field-label">Product Description</label>
+              <textarea id="prod-desc" rows="3" placeholder="Describe freshness, harvest date, weight, specs, or warranty..."></textarea>
+            </div>
+
+            <div style="margin-top:0.85rem;">
+              <label class="field-label">Product Photos (Max 2 Images — Auto-compressed)</label>
+              <div class="photo-slots-grid">
+                <div class="photo-slot" onclick="triggerSlotFile(0)">
+                  <input type="file" id="slot-file-0" accept="image/*" class="hidden" onchange="handleSlotFileChange(0, event)" />
+                  <img id="slot-preview-0" class="hidden" alt="Slot 1" />
+                  <button type="button" id="slot-remove-0" class="remove-slot-btn hidden" onclick="removePhotoSlot(0, event)">✕</button>
+                  <div id="slot-placeholder-0">
+                    <div style="font-size:1.35rem;">📷</div>
+                    <div class="slot-label">Main Photo (1/2)</div>
+                  </div>
+                </div>
+                <div class="photo-slot" onclick="triggerSlotFile(1)">
+                  <input type="file" id="slot-file-1" accept="image/*" class="hidden" onchange="handleSlotFileChange(1, event)" />
+                  <img id="slot-preview-1" class="hidden" alt="Slot 2" />
+                  <button type="button" id="slot-remove-1" class="remove-slot-btn hidden" onclick="removePhotoSlot(1, event)">✕</button>
+                  <div id="slot-placeholder-1">
+                    <div style="font-size:1.35rem;">🖼️</div>
+                    <div class="slot-label">Second Photo (2/2)</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top:1rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
+              <button type="submit" id="save-product-btn" class="shop-cta">💾 Save &amp; Publish Product</button>
+              <button type="button" class="secondary" onclick="resetProductForm()">Clear Form</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <div class="row-between">
+            <h3 style="margin:0;">My Published Products</h3>
+            <span id="seller-products-count" class="badge seller">0 Items</span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Photo</th>
+                  <th>Product Name</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Net / Unit</th>
+                  <th>Stock</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="seller-products-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: SHIPPING & QR PAYMENT SETTINGS -->
+      <div id="seller-tab-shipping" class="hidden">
+        <div class="panel">
+          <h3 style="margin:0 0 0.25rem;">🚚 Barangay / Municipality Delivery Rates &amp; Shop QR Payment</h3>
+          <p style="margin:0 0 1rem;font-size:0.82rem;color:var(--muted);">Set custom delivery fees per barangay/location and upload your GCash / Maya / Bank QR code for buyer checkout.</p>
+
+          <form onsubmit="saveSellerShippingAndQr(event)">
+            <div class="form-grid">
+              <div>
+                <label class="field-label">Shop Display Name *</label>
+                <input type="text" id="ship-shop-name" required placeholder="e.g. Dangay Fresh Farm" />
+              </div>
+              <div>
+                <label class="field-label">Shop Contact Number *</label>
+                <input type="text" id="ship-shop-phone" required placeholder="09XX-XXX-XXXX" />
+              </div>
+              <div>
+                <label class="field-label">Shop Pickup / Origin Location</label>
+                <input type="text" id="ship-shop-location" placeholder="e.g. Brgy. Dangay, Roxas, Oriental Mindoro" />
+              </div>
+              <div>
+                <label class="field-label">Default Fallback Delivery Fee (₱)</label>
+                <input type="number" id="ship-default-fee" step="0.01" min="0" value="50" />
+              </div>
+            </div>
+
+            <div class="shipping-config-box">
+              <strong style="font-size:0.86rem;color:var(--primary-deep);">📍 Custom Barangay / Location Delivery Rates</strong>
+              <p style="margin:0.2rem 0 0.65rem;font-size:0.78rem;color:var(--text-secondary);">Add specific delivery rates per barangay (e.g., Dangay = ₱20, Poblacion = ₱30, Bongabong = ₱80). Use ₱0 for Free Delivery.</p>
+              <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                <input type="text" id="new-brgy-name" placeholder="Barangay or Town Name (e.g. Brgy. Dangay)" style="flex:2;min-width:180px;" />
+                <input type="number" id="new-brgy-fee" step="0.01" min="0" placeholder="Fee (₱)" style="flex:1;min-width:110px;" />
+                <button type="button" class="add-cart-outline" onclick="addBarangayRate()">+ Add Location</button>
+              </div>
+              <div id="brgy-rules-list" class="brgy-rules-grid"></div>
+            </div>
+
+            <div class="shipping-config-box" style="margin-top:0.85rem;">
+              <strong style="font-size:0.86rem;color:var(--primary-deep);">📲 Shop E-Wallet / QR Payment Setup (GCash / Maya / InstaPay)</strong>
+              <p style="margin:0.2rem 0 0.65rem;font-size:0.78rem;color:var(--text-secondary);">Buyers can scan this QR code during checkout and submit their reference number.</p>
+              <div class="form-grid">
+                <div>
+                  <label class="field-label">E-Wallet / Bank Account Name &amp; Number</label>
+                  <input type="text" id="ship-qr-account" placeholder="e.g. GCash - Juan Dela Cruz (0917-123-4567)" />
+                </div>
+                <div>
+                  <label class="field-label">Upload Shop QR Code Image</label>
+                  <input type="file" id="ship-qr-file" accept="image/*" onchange="handleSellerQrUpload(event)" />
+                </div>
+              </div>
+              <div id="seller-qr-preview-wrap" class="hidden" style="margin-top:0.65rem;display:flex;align-items:center;gap:0.85rem;">
+                <img id="seller-qr-preview-img" src="" alt="Shop QR" style="width:110px;height:110px;object-fit:contain;border:1px solid var(--border);border-radius:8px;background:#fff;padding:4px;" />
+                <div>
+                  <div style="font-size:0.8rem;font-weight:700;color:var(--primary-dark);">Active Shop QR Code</div>
+                  <button type="button" class="danger-outline sm" style="margin-top:0.35rem;" onclick="clearSellerQrImage()">Remove QR Image</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top:1rem;">
+              <button type="submit" class="shop-cta">💾 Save Shipping &amp; Payment Settings</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         VIEW 3: ADMIN PANEL
+         ========================================================= -->
+    <section id="view-admin" class="hidden">
+      <div class="row-between" style="margin-bottom:0.85rem;">
+        <div>
+          <h2 style="margin:0;color:var(--primary-deep);">🛡️ Admin Control Panel</h2>
+          <p style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Approve seller applications, monitor platform-wide 10% commission revenue, and manage users.</p>
+        </div>
+        <button class="secondary sm" onclick="switchView('marketplace')">← Back to Marketplace</button>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Platform GMV</div>
+          <div class="kpi-value" id="admin-kpi-gmv">₱0.00</div>
+          <div class="kpi-sub">Total non-cancelled orders</div>
+        </div>
+        <div class="kpi-card highlight">
+          <div class="kpi-label">Admin Commission (10%)</div>
+          <div class="kpi-value" id="admin-kpi-commission">₱0.00</div>
+          <div class="kpi-sub">Platform earnings (10% fee)</div>
+        </div>
+        <div class="kpi-card amber-highlight">
+          <div class="kpi-label">Pending Seller Applications</div>
+          <div class="kpi-value" id="admin-kpi-pending-sellers">0</div>
+          <div class="kpi-sub">Awaiting verification</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Total Registered Users</div>
+          <div class="kpi-value" id="admin-kpi-users">0</div>
+          <div class="kpi-sub">Buyers, sellers &amp; admins</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin:0 0 0.5rem;">Seller Applications</h3>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Applicant</th>
+                <th>Shop Name</th>
+                <th>Phone &amp; Location</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-sellers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 style="margin:0 0 0.5rem;">All Platform Orders &amp; Commission Tracker</h3>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Buyer</th>
+                <th>Seller / Shop</th>
+                <th>Status</th>
+                <th>Total</th>
+                <th>10% Commission</th>
+                <th>Receipt</th>
+              </tr>
+            </thead>
+            <tbody id="admin-orders-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         VIEW 4: BUYER MY PURCHASES
+         ========================================================= -->
+    <section id="view-orders" class="hidden">
+      <div class="row-between" style="margin-bottom:0.85rem;">
+        <div>
+          <h2 style="margin:0;color:var(--primary-deep);">🛍️ My Purchases &amp; Order Tracking</h2>
+          <p style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Track live delivery status, chat sellers, view official delivery receipts, and rate delivered items.</p>
+        </div>
+        <button class="secondary sm" onclick="switchView('marketplace')">← Continue Shopping</button>
+      </div>
+      <div id="buyer-orders-list"></div>
+    </section>
+  </main>
+
+  <!-- =========================================================
+       MODALS
+       ========================================================= -->
+  <!-- MODAL 1: AUTH -->
+  <div id="auth-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeAuthModal()">
+    <div class="modal" style="max-width:420px;">
+      <div class="row-between">
+        <h3 style="margin:0;color:var(--primary-deep);">Welcome to MarketHub</h3>
+        <button class="secondary sm" onclick="closeAuthModal()">✕</button>
+      </div>
+
+      <div class="auth-tabs">
+        <button id="tab-signin" class="auth-tab active" onclick="switchAuthTab('signin')">Sign In</button>
+        <button id="tab-signup" class="auth-tab" onclick="switchAuthTab('signup')">Create Account</button>
+      </div>
+
+      <button type="button" class="google-btn" onclick="signInWithGoogle()">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Continue with Google
+      </button>
+
+      <div class="auth-divider">or continue with email</div>
+
+      <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+        <div id="signup-name-wrap" class="hidden" style="margin-bottom:0.75rem;">
+          <label class="field-label">Full Name *</label>
+          <input type="text" id="auth-fullname" placeholder="Juan Dela Cruz" />
+        </div>
+        <div style="margin-bottom:0.75rem;">
+          <label class="field-label">Email Address *</label>
+          <input type="email" id="auth-email" required placeholder="you@example.com" />
+        </div>
+        <div style="margin-bottom:0.9rem;">
+          <label class="field-label">Password *</label>
+          <input type="password" id="auth-password" required minlength="6" placeholder="Minimum 6 characters" />
+        </div>
+        <button type="submit" id="auth-submit-btn" style="width:100%;" class="shop-cta">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 2: SHOPPING CART & CHECKOUT -->
+  <div id="cart-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeCartModal()">
+    <div class="modal" style="max-width:620px;">
+      <div class="row-between" style="border-bottom:1px solid var(--border);padding-bottom:0.65rem;margin-bottom:0.85rem;">
+        <h3 style="margin:0;color:var(--primary-deep);">🛒 Shopping Cart &amp; Checkout</h3>
+        <button class="secondary sm" onclick="closeCartModal()">✕</button>
+      </div>
+
+      <div id="cart-items-container"></div>
+
+      <div id="checkout-section" class="hidden" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:0.9rem;">
+        <h4 style="margin:0 0 0.65rem;color:var(--primary-deep);">📍 Delivery Details</h4>
+        <div class="form-grid">
+          <div>
+            <label class="field-label">Recipient Full Name *</label>
+            <input type="text" id="checkout-name" required placeholder="Full name" />
+          </div>
+          <div>
+            <label class="field-label">Mobile Number *</label>
+            <input type="text" id="checkout-phone" required placeholder="09XX-XXX-XXXX" />
+          </div>
+          <div>
+            <label class="field-label">Barangay / Municipality (for Delivery Rate) *</label>
+            <input type="text" id="checkout-barangay" list="barangay-suggestions" placeholder="Type or select barangay..." oninput="recalculateCartCheckoutTotals()" />
+            <datalist id="barangay-suggestions"></datalist>
+          </div>
+          <div>
+            <label class="field-label">Complete Street / House Address *</label>
+            <input type="text" id="checkout-address" required placeholder="Sitio / Street / Landmark" />
+          </div>
+        </div>
+
+        <div style="margin-top:0.75rem;">
+          <label class="field-label">Delivery Notes (Optional)</label>
+          <input type="text" id="checkout-notes" placeholder="e.g. Call upon arrival near covered court" />
+        </div>
+
+        <div style="margin-top:0.85rem;">
+          <label class="field-label">Select Payment Method *</label>
+          <div class="payment-choice-grid">
+            <div id="pay-card-cod" class="payment-choice-card active" onclick="selectPaymentMethod('COD')">
+              <span style="font-size:1.35rem;">💵</span>
+              <div>
+                <div style="font-weight:700;font-size:0.84rem;">Cash on Delivery (COD)</div>
+                <div style="font-size:0.72rem;color:var(--muted);">Pay cash upon delivery</div>
+              </div>
+            </div>
+            <div id="pay-card-qr" class="payment-choice-card" onclick="selectPaymentMethod('QR')">
+              <span style="font-size:1.35rem;">📲</span>
+              <div>
+                <div style="font-weight:700;font-size:0.84rem;">QR / E-Wallet Payment</div>
+                <div style="font-size:0.72rem;color:var(--muted);">Scan Shop QR &amp; enter Ref #</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="checkout-qr-panel" class="qr-payment-panel hidden">
+          <div style="font-weight:700;font-size:0.84rem;color:var(--primary-deep);margin-bottom:0.45rem;">📲 Scan Seller QR Code to Pay</div>
+          <div id="checkout-qr-sellers-list"></div>
+          <div style="margin-top:0.65rem;">
+            <label class="field-label">Payment Reference Number *</label>
+            <input type="text" id="checkout-qr-ref" placeholder="Enter GCash / Maya / InstaPay Reference No." />
+          </div>
+        </div>
+
+        <div class="delivery-summary-card" style="margin-top:0.85rem;">
+          <div class="row-between"><span>Items Subtotal:</span><strong id="checkout-subtotal">₱0.00</strong></div>
+          <div class="row-between" style="margin-top:0.25rem;"><span>Delivery Fee (by Barangay/Item):</span><strong id="checkout-shipping">₱0.00</strong></div>
+          <div class="row-between" style="margin-top:0.45rem;padding-top:0.45rem;border-top:1px solid #86efac;font-size:1rem;color:var(--primary-deep);">
+            <span>Grand Total Payable:</span>
+            <strong id="checkout-grand-total">₱0.00</strong>
+          </div>
+        </div>
+
+        <button id="place-order-btn" class="shop-cta" style="width:100%;padding:0.75rem;font-size:0.95rem;" onclick="placeOrder()">
+          ✅ Confirm &amp; Place Order
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: APPLY SELLER -->
+  <div id="seller-apply-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeSellerApplyModal()">
+    <div class="modal" style="max-width:460px;">
+      <div class="row-between" style="margin-bottom:0.75rem;">
+        <h3 style="margin:0;color:var(--primary-deep);">🏪 Apply as a MarketHub Seller</h3>
+        <button class="secondary sm" onclick="closeSellerApplyModal()">✕</button>
+      </div>
+      <p style="font-size:0.82rem;color:var(--muted);margin-top:0;">Sell fresh farm produce, gadgets, or local goods. Platform fee is 10% per completed order.</p>
+      <form onsubmit="submitSellerApplication(event)">
+        <div style="margin-bottom:0.75rem;">
+          <label class="field-label">Shop / Farm Name *</label>
+          <input type="text" id="apply-shop-name" required placeholder="e.g. Dangay Highland Farm" />
+        </div>
+        <div style="margin-bottom:0.75rem;">
+          <label class="field-label">Contact Mobile Number *</label>
+          <input type="text" id="apply-shop-phone" required placeholder="09XX-XXX-XXXX" />
+        </div>
+        <div style="margin-bottom:0.75rem;">
+          <label class="field-label">Farm / Store Address *</label>
+          <input type="text" id="apply-shop-location" required placeholder="Barangay, Municipality, Province" />
+        </div>
+        <div style="margin-bottom:0.9rem;">
+          <label class="field-label">What products do you plan to sell?</label>
+          <textarea id="apply-shop-desc" rows="2" placeholder="Fresh vegetables, fruits, smartphones, accessories..."></textarea>
+        </div>
+        <button type="submit" class="shop-cta" style="width:100%;">Submit Seller Application</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 4: PRINTABLE DELIVERY RECEIPT -->
+  <div id="receipt-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeReceiptModal()">
+    <div class="modal" style="max-width:580px;">
+      <div class="row-between no-print" style="margin-bottom:0.75rem;">
+        <h3 style="margin:0;color:var(--primary-deep);">🧾 Official Delivery Receipt</h3>
+        <div style="display:flex;gap:0.45rem;">
+          <button class="shop-cta sm" onclick="window.print()">🖨️ Print Receipt</button>
+          <button class="secondary sm" onclick="closeReceiptModal()">✕</button>
+        </div>
+      </div>
+      <div id="receipt-content" class="receipt-sheet"></div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: LIVE CHAT -->
+  <div id="chat-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeChatModal()">
+    <div class="modal chat-modal-box">
+      <div class="chat-header-bar">
+        <div>
+          <strong id="chat-modal-title" style="font-size:0.96rem;">💬 MarketHub Messages</strong>
+          <div id="chat-modal-sub" style="font-size:0.74rem;opacity:0.9;">Direct Buyer &amp; Seller Chat</div>
+        </div>
+        <button class="sm" style="background:rgba(255,255,255,0.2);color:#fff;" onclick="closeChatModal()">✕</button>
+      </div>
+      <div class="chat-body-split">
+        <div id="chat-threads-list" class="chat-threads-col"></div>
+        <div class="chat-messages-col">
+          <div id="chat-messages-feed" class="chat-messages-feed">
+            <div style="text-align:center;color:var(--muted);font-size:0.82rem;margin-top:2rem;">Select a conversation to start messaging.</div>
+          </div>
+          <form class="chat-input-bar" onsubmit="sendChatMessage(event)">
+            <input type="text" id="chat-message-input" placeholder="Type your message to seller/buyer..." autocomplete="off" />
+            <button type="submit" class="shop-cta">Send</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: PRODUCT REVIEW -->
+  <div id="review-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeReviewModal()">
+    <div class="modal" style="max-width:440px;">
+      <div class="row-between" style="margin-bottom:0.65rem;">
+        <h3 style="margin:0;color:var(--primary-deep);">⭐ Rate &amp; Review Product</h3>
+        <button class="secondary sm" onclick="closeReviewModal()">✕</button>
+      </div>
+      <div id="review-product-title" style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem;"></div>
+      <input type="hidden" id="review-product-id" />
+      <input type="hidden" id="review-order-id" />
+      <label class="field-label">Select Star Rating *</label>
+      <div class="star-picker" id="star-picker-row">
+        <button type="button" class="star-btn selected" onclick="selectReviewStars(1)">★</button>
+        <button type="button" class="star-btn selected" onclick="selectReviewStars(2)">★</button>
+        <button type="button" class="star-btn selected" onclick="selectReviewStars(3)">★</button>
+        <button type="button" class="star-btn selected" onclick="selectReviewStars(4)">★</button>
+        <button type="button" class="star-btn selected" onclick="selectReviewStars(5)">★</button>
+      </div>
+      <label class="field-label">Your Review Comment</label>
+      <textarea id="review-comment" rows="3" placeholder="Share product quality, freshness, or delivery experience..."></textarea>
+      <button type="button" class="shop-cta" style="width:100%;margin-top:0.85rem;" onclick="submitProductReview()">Submit Review</button>
+    </div>
+  </div>
+
+  <!-- MODAL 7: QR ZOOM LIGHTBOX -->
+  <div id="qr-zoom-modal" class="modal-backdrop hidden" onclick="this.classList.add('hidden')">
+    <div class="modal" style="max-width:360px;text-align:center;" onclick="event.stopPropagation()">
+      <div class="row-between" style="margin-bottom:0.65rem;">
+        <strong id="qr-zoom-title">Scan QR Code</strong>
+        <button class="secondary sm" onclick="document.getElementById('qr-zoom-modal').classList.add('hidden')">✕</button>
+      </div>
+      <img id="qr-zoom-img" src="" alt="QR Zoom" style="width:100%;max-width:280px;border-radius:8px;border:1px solid var(--border);" />
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Modular ES6 Entry Point -->
+  <script type="module" src="js/chat.js"></script>
+</body>
+</html>
