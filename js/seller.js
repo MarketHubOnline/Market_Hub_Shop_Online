@@ -2,7 +2,7 @@
 // SELLER APPLICATION, SELLER CENTRE (4 TABS) & INCOME ANALYTICS
 // =========================================================
 import { supabaseClient, COMMISSION_RATE, CATEGORIES, state } from './config.js';
-import { escapeHtml, formatPeso, getProductImages, compressImageToDataUrl, showToast } from './utils.js';
+import { escapeHtml, formatPeso, getProductImages, uploadCompressedImageToBucket, showToast } from './utils.js';
 import { openAuthModal, loadUserSession } from './auth.js';
 import { loadMarketplaceData } from './marketplace.js';
 
@@ -532,11 +532,14 @@ export async function handleSlotFileChange(slotIdx, event) {
   const file = event.target.files?.[0];
   if (!file) return;
   try {
-    const compressed = await compressImageToDataUrl(file, 900, 0.78);
-    state.productPhotoSlots[slotIdx] = compressed;
+    showToast('Compressing & uploading photo...', 'success');
+    const folder = `products/${state.currentUser?.id || 'seller'}`;
+    const publicUrl = await uploadCompressedImageToBucket(file, folder, 900, 0.78);
+    state.productPhotoSlots[slotIdx] = publicUrl;
     refreshPhotoSlotsUI();
+    showToast('Photo uploaded to Storage!');
   } catch (err) {
-    showToast('Could not process image.', 'error');
+    showToast(err.message || 'Could not upload image.', 'error');
   }
 }
 
@@ -811,8 +814,15 @@ export function renderBarangayRules() {
 export async function handleSellerQrUpload(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  state.tempSellerQrUrl = await compressImageToDataUrl(file, 650, 0.85);
-  renderSellerQrPreview();
+  try {
+    showToast('Uploading QR image...', 'success');
+    const folder = `qr/${state.currentUser?.id || 'seller'}`;
+    state.tempSellerQrUrl = await uploadCompressedImageToBucket(file, folder, 650, 0.85);
+    renderSellerQrPreview();
+    showToast('QR image uploaded!');
+  } catch (err) {
+    showToast(err.message || 'Could not upload QR image.', 'error');
+  }
 }
 
 export function clearSellerQrImage() {
