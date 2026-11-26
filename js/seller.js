@@ -161,18 +161,74 @@ export async function updateSellerOrderStatus(orderId, newStatus) {
 }
 
 // =========================================================
-// INCOME MONITORING: PUHUNAN VS. TUBO, HIWALAY NA SHIPPING,
-// LESS ADMIN FEE & PRODUCT RATE RANKING
+// INCOME MONITORING: PUHUNAN + TUBO (LESS ADMIN FEE),
+// BUKOD NA RIDER SHIPPING, & DAILY TO MONTHLY PRODUCT SALES
 // =========================================================
+let incomeGroupMode = 'daily';
+
+export function handleIncomePeriodChange() {
+  const period = document.getElementById('income-period-filter')?.value || 'all';
+  const dateInput = document.getElementById('income-custom-date');
+  const monthInput = document.getElementById('income-custom-month');
+
+  dateInput?.classList.toggle('hidden', period !== 'custom');
+  monthInput?.classList.toggle('hidden', period !== 'custom');
+
+  if (period === 'custom') {
+    if (dateInput && !dateInput.value) {
+      dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+  }
+  renderSellerIncomeAnalytics();
+}
+
+export function setIncomeGroupMode(mode) {
+  incomeGroupMode = mode;
+  const btnDaily = document.getElementById('btn-group-daily');
+  const btnMonthly = document.getElementById('btn-group-monthly');
+  if (btnDaily && btnMonthly) {
+    btnDaily.className = mode === 'daily' ? 'shop-cta sm' : 'secondary sm';
+    btnMonthly.className = mode === 'monthly' ? 'shop-cta sm' : 'secondary sm';
+  }
+  renderSellerIncomeAnalytics();
+}
+
+function filterOrdersBySelectedPeriod(orders) {
+  const period = document.getElementById('income-period-filter')?.value || 'all';
+  const now = new Date();
+  const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
+  const currentMonthStr = todayStr.slice(0, 7); // YYYY-MM
+
+  if (period === 'today') {
+    return orders.filter(o => new Date(o.created_at).toLocaleDateString('en-CA') === todayStr);
+  }
+  if (period === '7days') {
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    return orders.filter(o => new Date(o.created_at) >= sevenDaysAgo);
+  }
+  if (period === 'month') {
+    return orders.filter(o => new Date(o.created_at).toLocaleDateString('en-CA').startsWith(currentMonthStr));
+  }
+  if (period === 'custom') {
+    const customDate = document.getElementById('income-custom-date')?.value;
+    const customMonth = document.getElementById('income-custom-month')?.value;
+    return orders.filter(o => {
+      const dStr = new Date(o.created_at).toLocaleDateString('en-CA');
+      if (customDate) return dStr === customDate;
+      if (customMonth) return dStr.startsWith(customMonth);
+      return true;
+    });
+  }
+  return orders;
+}
+
 export function renderSellerIncomeAnalytics() {
-  const activeOrders = state.sellerOrders.filter(o => o.status !== 'cancelled');
+  const nonCancelledOrders = state.sellerOrders.filter(o => o.status !== 'cancelled');
+  const activeOrders = filterOrdersBySelectedPeriod(nonCancelledOrders);
   const myProds = state.allProducts.filter(p => p.seller_id === state.currentUser?.id);
 
-  // Map product catalog for cost_price & rating lookup
   const prodCatalogMap = new Map();
-  myProds.forEach(p => {
-    prodCatalogMap.set(String(p.id), p);
-  });
+  myProds.forEach(p => prodCatalogMap.set(String(p.id), p));
 
   // Per-product performance tracker
   const productPerfMap = new Map();
@@ -186,25 +242,32 @@ export function renderSellerIncomeAnalytics() {
       productSales: 0,
       totalCapital: 0,
       adminFee: 0,
-      netTubo: 0
+      netTubo: 0,
+      sellerPayout: 0
     });
   });
 
+  // Daily / Monthly grouping map
+  const periodSummaryMap = new Map();
+
   let totalProductSales = 0;
   let totalCapitalCost = 0;
-  let totalShippingIncome = 0;
+  let totalRiderShipping = 0;
   let totalAdminFee = 0;
   let totalNetTubo = 0;
+  let totalSellerPayout = 0;
+
+  let deliveredPayout = 0;
   let deliveredNetTubo = 0;
+  let pendingPayout = 0;
   let pendingNetTubo = 0;
 
   const orderRowsHtml = activeOrders.map(o => {
     const items = Array.isArray(o.items) ? o.items : [];
-    const shipFee = Number(o.shipping_fee || 0);
+    const riderShipFee = Number(o.shipping_fee || 0);
     const grossTotal = Number(o.total_amount || 0);
-    const prodSales = Number(o.subtotal_amount ?? Math.max(0, grossTotal - shipFee));
+    const prodSales = Number(o.subtotal_amount ?? Math.max(0, grossTotal - riderShipFee));
 
-    // Calculate puhunan (capital) for items in this order
     let orderCapital = 0;
     items.forEach(item => {
       const qty = Number(item.qty || 1);
@@ -216,6 +279,7 @@ export function renderSellerIncomeAnalytics() {
       const itemLineCost = unitCost * qty;
       const itemLineComm = itemLineSales * COMMISSION_RATE;
       const itemLineNetTubo = itemLineSales - itemLineCost - itemLineComm;
+      const itemLineSellerPayout = itemLineCost + itemLineNetTubo; // Puhunan + Net Tubo
 
       orderCapital += itemLineCost;
 
@@ -230,7 +294,8 @@ export function renderSellerIncomeAnalytics() {
           productSales: 0,
           totalCapital: 0,
           adminFee: 0,
-          netTubo: 0
+          netTubo: 0,
+          sellerPayout: 0
         });
       }
       const perf = productPerfMap.get(key);
@@ -239,66 +304,112 @@ export function renderSellerIncomeAnalytics() {
       perf.totalCapital += itemLineCost;
       perf.adminFee += itemLineComm;
       perf.netTubo += itemLineNetTubo;
+      perf.sellerPayout += itemLineSellerPayout;
     });
 
-    // Admin fee deducted from product sales (10%)
+    // 10% Admin fee is deducted from Product Sales ONLY (Rider shipping is separate)
     const orderAdminFee = Number(o.admin_commission ?? (prodSales * COMMISSION_RATE));
     const orderNetTubo = prodSales - orderCapital - orderAdminFee;
+    const orderSellerPayout = prodSales - orderAdminFee; // Equals Puhunan + Net Tubo
 
     totalProductSales += prodSales;
     totalCapitalCost += orderCapital;
-    totalShippingIncome += shipFee;
+    totalRiderShipping += riderShipFee;
     totalAdminFee += orderAdminFee;
     totalNetTubo += orderNetTubo;
+    totalSellerPayout += orderSellerPayout;
 
-    if (o.status === 'delivered') deliveredNetTubo += orderNetTubo;
-    else pendingNetTubo += orderNetTubo;
+    if (o.status === 'delivered') {
+      deliveredPayout += orderSellerPayout;
+      deliveredNetTubo += orderNetTubo;
+    } else {
+      pendingPayout += orderSellerPayout;
+      pendingNetTubo += orderNetTubo;
+    }
+
+    // Group into Daily or Monthly bucket
+    const dObj = new Date(o.created_at);
+    const periodKey = incomeGroupMode === 'monthly'
+      ? dObj.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
+      : dObj.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    const sortStamp = incomeGroupMode === 'monthly'
+      ? dObj.toISOString().slice(0, 7)
+      : dObj.toISOString().slice(0, 10);
+
+    if (!periodSummaryMap.has(periodKey)) {
+      periodSummaryMap.set(periodKey, {
+        label: periodKey,
+        sortStamp,
+        orderCount: 0,
+        capital: 0,
+        netTubo: 0,
+        adminFee: 0,
+        sellerPayout: 0,
+        riderShipping: 0,
+        itemQtyMap: {}
+      });
+    }
+    const bucket = periodSummaryMap.get(periodKey);
+    bucket.orderCount += 1;
+    bucket.capital += orderCapital;
+    bucket.netTubo += orderNetTubo;
+    bucket.adminFee += orderAdminFee;
+    bucket.sellerPayout += orderSellerPayout;
+    bucket.riderShipping += riderShipFee;
+    items.forEach(it => {
+      const t = it.title || 'Item';
+      bucket.itemQtyMap[t] = (bucket.itemQtyMap[t] || 0) + Number(it.qty || 1);
+    });
 
     return `
       <tr>
         <td><strong>#${escapeHtml(String(o.id).slice(0, 8).toUpperCase())}</strong></td>
-        <td>${new Date(o.created_at).toLocaleDateString()}</td>
+        <td>${dObj.toLocaleDateString()}</td>
         <td><span class="badge status-${escapeHtml(o.status)}">${escapeHtml(o.status)}</span></td>
         <td>${formatPeso(prodSales)}</td>
-        <td style="color:#0284c7;font-weight:600;">${formatPeso(shipFee)}</td>
-        <td style="color:#475569;">-${formatPeso(orderCapital)}</td>
+        <td style="color:#475569;">${formatPeso(orderCapital)}</td>
         <td style="color:var(--danger);">-${formatPeso(orderAdminFee)}</td>
-        <td style="color:${orderNetTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:800;">${formatPeso(orderNetTubo)}</td>
+        <td style="color:${orderNetTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(orderNetTubo)}</td>
+        <td style="background:#f0fdf4;color:var(--primary-deep);font-weight:800;">${formatPeso(orderSellerPayout)}</td>
+        <td style="color:#0284c7;font-weight:600;">${formatPeso(riderShipFee)}</td>
       </tr>
     `;
   });
 
-  const grossVolume = totalProductSales + totalShippingIncome;
+  const grossCollectedFromBuyers = totalProductSales + totalRiderShipping;
 
-  // Update KPI Cards
-  document.getElementById('inc-kpi-product-sales').textContent = formatPeso(totalProductSales);
+  // Update Top KPI Cards
+  document.getElementById('inc-kpi-seller-payout').textContent = formatPeso(totalSellerPayout);
   document.getElementById('inc-kpi-capital').textContent = formatPeso(totalCapitalCost);
-  document.getElementById('inc-kpi-commission').textContent = '-' + formatPeso(totalAdminFee);
   document.getElementById('inc-kpi-net-tubo').textContent = formatPeso(totalNetTubo);
-  document.getElementById('inc-kpi-shipping').textContent = formatPeso(totalShippingIncome);
+  document.getElementById('inc-kpi-commission').textContent = '-' + formatPeso(totalAdminFee);
+  document.getElementById('inc-kpi-shipping').textContent = formatPeso(totalRiderShipping);
 
   // Update Statement Ledger
   document.getElementById('ledger-product-sales').textContent = formatPeso(totalProductSales);
-  document.getElementById('ledger-capital-cost').textContent = '-' + formatPeso(totalCapitalCost);
   document.getElementById('ledger-commission-deduct').textContent = '-' + formatPeso(totalAdminFee);
+  document.getElementById('ledger-seller-payout').textContent = formatPeso(totalSellerPayout);
+  document.getElementById('ledger-capital-cost').textContent = formatPeso(totalCapitalCost);
   document.getElementById('ledger-net-tubo').textContent = formatPeso(totalNetTubo);
-  document.getElementById('ledger-shipping-sales').textContent = formatPeso(totalShippingIncome);
-  document.getElementById('ledger-gross-total').textContent = formatPeso(grossVolume);
+  document.getElementById('ledger-shipping-sales').textContent = formatPeso(totalRiderShipping);
+  document.getElementById('ledger-gross-total').textContent = formatPeso(grossCollectedFromBuyers);
+  document.getElementById('ledger-delivered-payout').textContent = formatPeso(deliveredPayout);
   document.getElementById('ledger-delivered-net').textContent = formatPeso(deliveredNetTubo);
+  document.getElementById('ledger-pending-payout').textContent = formatPeso(pendingPayout);
   document.getElementById('ledger-pending-net').textContent = formatPeso(pendingNetTubo);
 
-  // Update Pie Chart (Net Tubo vs Puhunan vs Admin Fee vs Hiwalay na Shipping)
+  // Update Pie Chart (Puhunan + Net Tubo vs Admin Fee vs Bukod na Rider Shipping)
   const ctx = document.getElementById('seller-income-pie-chart');
   if (ctx && window.Chart) {
     if (state.incomePieChartInstance) state.incomePieChartInstance.destroy();
     const safeNetTubo = Math.max(0, totalNetTubo);
-    const hasData = (safeNetTubo + totalCapitalCost + totalAdminFee + totalShippingIncome) > 0;
+    const hasData = (safeNetTubo + totalCapitalCost + totalAdminFee + totalRiderShipping) > 0;
     state.incomePieChartInstance = new Chart(ctx, {
       type: 'pie',
       data: {
-        labels: ['Net Tubo (Kita)', 'Puhunan (Capital)', 'Admin Fee (10%)', 'Shipping Income (Hiwalay)'],
+        labels: ['Net Tubo (Kita)', 'Puhunan (Capital)', 'Admin Fee (10%)', 'Rider Shipping (Bukod)'],
         datasets: [{
-          data: hasData ? [safeNetTubo, totalCapitalCost, totalAdminFee, totalShippingIncome] : [1, 0, 0, 0],
+          data: hasData ? [safeNetTubo, totalCapitalCost, totalAdminFee, totalRiderShipping] : [1, 0, 0, 0],
           backgroundColor: ['#16a34a', '#64748b', '#f59e0b', '#0ea5e9'],
           borderWidth: 2,
           borderColor: '#ffffff'
@@ -313,25 +424,49 @@ export function renderSellerIncomeAnalytics() {
     });
   }
 
-  // Render Product Rate / Top Earning Products Table
+  // Render Daily / Monthly Summary Table
+  const periodTbody = document.getElementById('seller-period-summary-tbody');
+  const sortedPeriods = Array.from(periodSummaryMap.values()).sort((a, b) => b.sortStamp.localeCompare(a.sortStamp));
+
+  if (!sortedPeriods.length) {
+    periodTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);">Walang benta sa napiling petsa o buwan.</td></tr>`;
+  } else {
+    periodTbody.innerHTML = sortedPeriods.map(row => {
+      const topEntry = Object.entries(row.itemQtyMap).sort((a, b) => b[1] - a[1])[0];
+      const topProdLabel = topEntry ? `${escapeHtml(topEntry[0])} (${topEntry[1]} sold)` : '—';
+      return `
+        <tr>
+          <td><strong>${escapeHtml(row.label)}</strong></td>
+          <td>${row.orderCount}</td>
+          <td><span class="badge ship-free">🔥 ${topProdLabel}</span></td>
+          <td style="color:#475569;">${formatPeso(row.capital)}</td>
+          <td style="color:${row.netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(row.netTubo)}</td>
+          <td style="color:var(--danger);">-${formatPeso(row.adminFee)}</td>
+          <td style="background:#f0fdf4;color:var(--primary-deep);font-weight:800;">${formatPeso(row.sellerPayout)}</td>
+          <td style="color:#0284c7;font-weight:600;">${formatPeso(row.riderShipping)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Render Best-Selling & Top Earning Products Ranking Table
   const rateTbody = document.getElementById('seller-product-rate-tbody');
-  const rankedProducts = Array.from(productPerfMap.values()).sort((a, b) => b.netTubo - a.netTubo || b.unitsSold - a.unitsSold);
+  const rankedProducts = Array.from(productPerfMap.values()).sort((a, b) => b.unitsSold - a.unitsSold || b.netTubo - a.netTubo);
 
   if (!rankedProducts.length) {
     rateTbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);">No products or sales data available yet.</td></tr>`;
   } else {
     rateTbody.innerHTML = rankedProducts.map((p, idx) => {
-      const marginPct = p.productSales > 0 ? ((p.netTubo / p.productSales) * 100).toFixed(1) : '0.0';
-      const rankBadge = idx === 0 && p.netTubo > 0
-        ? '<span class="badge seller">🥇 #1 Top Earner</span>'
-        : idx === 1 && p.netTubo > 0
+      const rankBadge = idx === 0 && p.unitsSold > 0
+        ? '<span class="badge seller">🥇 #1 Malakas Bumenta</span>'
+        : idx === 1 && p.unitsSold > 0
           ? '<span class="badge">🥈 #2</span>'
-          : idx === 2 && p.netTubo > 0
+          : idx === 2 && p.unitsSold > 0
             ? '<span class="badge">🥉 #3</span>'
             : `#${idx + 1}`;
       const starDisplay = p.ratingCount > 0
         ? `<strong style="color:#d97706;">${p.ratingAvg.toFixed(1)} ★</strong> <span style="font-size:0.72rem;color:var(--muted);">(${p.ratingCount})</span>`
-        : `<span style="font-size:0.74rem;color:var(--muted);">No ratings yet</span>`;
+        : `<span style="font-size:0.74rem;color:var(--muted);">No ratings</span>`;
 
       return `
         <tr>
@@ -342,22 +477,21 @@ export function renderSellerIncomeAnalytics() {
           <td>${formatPeso(p.productSales)}</td>
           <td style="color:#475569;">${formatPeso(p.totalCapital)}</td>
           <td style="color:var(--danger);">-${formatPeso(p.adminFee)}</td>
-          <td style="color:${p.netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:800;">${formatPeso(p.netTubo)}</td>
-          <td><span class="badge ${Number(marginPct) >= 15 ? 'ship-free' : ''}">${marginPct}%</span></td>
+          <td style="color:${p.netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(p.netTubo)}</td>
+          <td style="background:#f0fdf4;color:var(--primary-deep);font-weight:800;">${formatPeso(p.sellerPayout)}</td>
         </tr>
       `;
     }).join('');
   }
 
-  // Render Per-Order Table
+  // Render Per-Order Breakdown Table
   const tbody = document.getElementById('seller-income-table-body');
   if (!orderRowsHtml.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);">No completed or active orders yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);">Walang orders sa napiling filter.</td></tr>`;
   } else {
     tbody.innerHTML = orderRowsHtml.join('');
   }
 }
-
 // =========================================================
 // PRODUCT POST, PUHUNAN/TUBO CALCULATOR, STOCKS & FREE SHIP
 // =========================================================
@@ -721,7 +855,6 @@ export async function saveSellerShippingAndQr(e) {
   await loadUserSession();
   await loadSellerDashboard();
 }
-
 Object.assign(window, {
   openSellerApplyModal,
   closeSellerApplyModal,
@@ -731,6 +864,9 @@ Object.assign(window, {
   renderSellerOrders,
   verifyQrPayment,
   updateSellerOrderStatus,
+  handleIncomePeriodChange,
+  setIncomeGroupMode,
+  renderSellerIncomeAnalytics,
   toggleProductShippingFeeInput,
   updateProductProfitPreview,
   triggerSlotFile,
@@ -750,3 +886,4 @@ Object.assign(window, {
   clearSellerQrImage,
   saveSellerShippingAndQr
 });
+
