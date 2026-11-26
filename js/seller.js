@@ -1,5 +1,5 @@
 // =========================================================
-// SELLER APPLICATION, SELLER CENTRE (4 TABS) & INCOME PIE CHART
+// SELLER APPLICATION, SELLER CENTRE (4 TABS) & INCOME ANALYTICS
 // =========================================================
 import { supabaseClient, COMMISSION_RATE, CATEGORIES, state } from './config.js';
 import { escapeHtml, formatPeso, getProductImages, compressImageToDataUrl, showToast } from './utils.js';
@@ -42,6 +42,7 @@ export function switchSellerTab(tab) {
     document.getElementById(`seller-nav-${t}`)?.classList.toggle('active', t === tab);
   });
   if (tab === 'income') renderSellerIncomeAnalytics();
+  if (tab === 'products') renderSellerProductsTable();
 }
 
 export async function loadSellerDashboard() {
@@ -91,8 +92,10 @@ export function renderSellerOrders() {
 
   list.innerHTML = filtered.map(o => {
     const items = Array.isArray(o.items) ? o.items : [];
-    const comm = Number(o.admin_commission ?? (Number(o.total_amount) * COMMISSION_RATE));
-    const net = Number(o.seller_net_earnings ?? (Number(o.total_amount) - comm));
+    const shipFee = Number(o.shipping_fee || 0);
+    const prodSub = Number(o.subtotal_amount ?? Math.max(0, Number(o.total_amount || 0) - shipFee));
+    const comm = Number(o.admin_commission ?? (prodSub * COMMISSION_RATE));
+    const netOrder = Number(o.seller_net_earnings ?? (Number(o.total_amount || 0) - comm));
 
     return `
       <div style="border:1px solid var(--border);border-radius:8px;padding:0.9rem;margin-bottom:0.75rem;background:#fafdfb;">
@@ -106,8 +109,8 @@ export function renderSellerOrders() {
             <div style="font-size:0.78rem;color:var(--muted);">📍 ${escapeHtml(o.delivery_address)}</div>
           </div>
           <div style="text-align:right;">
-            <div style="font-weight:800;font-size:1rem;color:var(--primary-dark);">Gross: ${formatPeso(o.total_amount)}</div>
-            <div style="font-size:0.74rem;color:var(--green);font-weight:700;">Net Profit: ${formatPeso(net)}</div>
+            <div style="font-weight:800;font-size:1rem;color:var(--primary-dark);">Total: ${formatPeso(o.total_amount)}</div>
+            <div style="font-size:0.74rem;color:var(--green);font-weight:700;">Net After Admin Fee: ${formatPeso(netOrder)}</div>
             <div style="font-size:0.72rem;color:var(--muted);">
               ${escapeHtml(o.payment_method)} • Ref: <strong>${escapeHtml(o.payment_reference || 'N/A')}</strong> (${escapeHtml(o.payment_status || 'unpaid')})
             </div>
@@ -157,56 +160,146 @@ export async function updateSellerOrderStatus(orderId, newStatus) {
   await loadSellerDashboard();
 }
 
+// =========================================================
+// INCOME MONITORING: PUHUNAN VS. TUBO, HIWALAY NA SHIPPING,
+// LESS ADMIN FEE & PRODUCT RATE RANKING
+// =========================================================
 export function renderSellerIncomeAnalytics() {
   const activeOrders = state.sellerOrders.filter(o => o.status !== 'cancelled');
-  let productSales = 0;
-  let shippingSales = 0;
-  let totalCommission = 0;
-  let totalNet = 0;
-  let deliveredNet = 0;
-  let pendingNet = 0;
+  const myProds = state.allProducts.filter(p => p.seller_id === state.currentUser?.id);
 
-  activeOrders.forEach(o => {
-    const sub = Number(o.subtotal_amount ?? (Number(o.total_amount) - Number(o.shipping_fee || 0)));
-    const ship = Number(o.shipping_fee || 0);
-    const gross = Number(o.total_amount || 0);
-    const comm = Number(o.admin_commission ?? (gross * COMMISSION_RATE));
-    const net = Number(o.seller_net_earnings ?? (gross - comm));
-
-    productSales += sub;
-    shippingSales += ship;
-    totalCommission += comm;
-    totalNet += net;
-    if (o.status === 'delivered') deliveredNet += net;
-    else pendingNet += net;
+  // Map product catalog for cost_price & rating lookup
+  const prodCatalogMap = new Map();
+  myProds.forEach(p => {
+    prodCatalogMap.set(String(p.id), p);
   });
 
-  const grossVolume = productSales + shippingSales;
+  // Per-product performance tracker
+  const productPerfMap = new Map();
+  myProds.forEach(p => {
+    productPerfMap.set(String(p.id), {
+      id: String(p.id),
+      title: p.title || 'Unnamed Product',
+      ratingAvg: Number(p.rating_avg || 0),
+      ratingCount: Number(p.rating_count || 0),
+      unitsSold: 0,
+      productSales: 0,
+      totalCapital: 0,
+      adminFee: 0,
+      netTubo: 0
+    });
+  });
 
-  document.getElementById('inc-kpi-gross').textContent = formatPeso(grossVolume);
-  document.getElementById('inc-kpi-shipping').textContent = formatPeso(shippingSales);
-  document.getElementById('inc-kpi-commission').textContent = '-' + formatPeso(totalCommission);
-  document.getElementById('inc-kpi-net').textContent = formatPeso(totalNet);
+  let totalProductSales = 0;
+  let totalCapitalCost = 0;
+  let totalShippingIncome = 0;
+  let totalAdminFee = 0;
+  let totalNetTubo = 0;
+  let deliveredNetTubo = 0;
+  let pendingNetTubo = 0;
 
-  document.getElementById('ledger-product-sales').textContent = formatPeso(productSales);
-  document.getElementById('ledger-shipping-sales').textContent = formatPeso(shippingSales);
+  const orderRowsHtml = activeOrders.map(o => {
+    const items = Array.isArray(o.items) ? o.items : [];
+    const shipFee = Number(o.shipping_fee || 0);
+    const grossTotal = Number(o.total_amount || 0);
+    const prodSales = Number(o.subtotal_amount ?? Math.max(0, grossTotal - shipFee));
+
+    // Calculate puhunan (capital) for items in this order
+    let orderCapital = 0;
+    items.forEach(item => {
+      const qty = Number(item.qty || 1);
+      const itemPrice = Number(item.price || 0);
+      const itemLineSales = itemPrice * qty;
+
+      const catalogProd = prodCatalogMap.get(String(item.product_id || item.id));
+      const unitCost = Number(item.cost_price ?? catalogProd?.cost_price ?? 0);
+      const itemLineCost = unitCost * qty;
+      const itemLineComm = itemLineSales * COMMISSION_RATE;
+      const itemLineNetTubo = itemLineSales - itemLineCost - itemLineComm;
+
+      orderCapital += itemLineCost;
+
+      const key = String(item.product_id || item.id || item.title);
+      if (!productPerfMap.has(key)) {
+        productPerfMap.set(key, {
+          id: key,
+          title: item.title || 'Product',
+          ratingAvg: Number(catalogProd?.rating_avg || 0),
+          ratingCount: Number(catalogProd?.rating_count || 0),
+          unitsSold: 0,
+          productSales: 0,
+          totalCapital: 0,
+          adminFee: 0,
+          netTubo: 0
+        });
+      }
+      const perf = productPerfMap.get(key);
+      perf.unitsSold += qty;
+      perf.productSales += itemLineSales;
+      perf.totalCapital += itemLineCost;
+      perf.adminFee += itemLineComm;
+      perf.netTubo += itemLineNetTubo;
+    });
+
+    // Admin fee deducted from product sales (10%)
+    const orderAdminFee = Number(o.admin_commission ?? (prodSales * COMMISSION_RATE));
+    const orderNetTubo = prodSales - orderCapital - orderAdminFee;
+
+    totalProductSales += prodSales;
+    totalCapitalCost += orderCapital;
+    totalShippingIncome += shipFee;
+    totalAdminFee += orderAdminFee;
+    totalNetTubo += orderNetTubo;
+
+    if (o.status === 'delivered') deliveredNetTubo += orderNetTubo;
+    else pendingNetTubo += orderNetTubo;
+
+    return `
+      <tr>
+        <td><strong>#${escapeHtml(String(o.id).slice(0, 8).toUpperCase())}</strong></td>
+        <td>${new Date(o.created_at).toLocaleDateString()}</td>
+        <td><span class="badge status-${escapeHtml(o.status)}">${escapeHtml(o.status)}</span></td>
+        <td>${formatPeso(prodSales)}</td>
+        <td style="color:#0284c7;font-weight:600;">${formatPeso(shipFee)}</td>
+        <td style="color:#475569;">-${formatPeso(orderCapital)}</td>
+        <td style="color:var(--danger);">-${formatPeso(orderAdminFee)}</td>
+        <td style="color:${orderNetTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:800;">${formatPeso(orderNetTubo)}</td>
+      </tr>
+    `;
+  });
+
+  const grossVolume = totalProductSales + totalShippingIncome;
+
+  // Update KPI Cards
+  document.getElementById('inc-kpi-product-sales').textContent = formatPeso(totalProductSales);
+  document.getElementById('inc-kpi-capital').textContent = formatPeso(totalCapitalCost);
+  document.getElementById('inc-kpi-commission').textContent = '-' + formatPeso(totalAdminFee);
+  document.getElementById('inc-kpi-net-tubo').textContent = formatPeso(totalNetTubo);
+  document.getElementById('inc-kpi-shipping').textContent = formatPeso(totalShippingIncome);
+
+  // Update Statement Ledger
+  document.getElementById('ledger-product-sales').textContent = formatPeso(totalProductSales);
+  document.getElementById('ledger-capital-cost').textContent = '-' + formatPeso(totalCapitalCost);
+  document.getElementById('ledger-commission-deduct').textContent = '-' + formatPeso(totalAdminFee);
+  document.getElementById('ledger-net-tubo').textContent = formatPeso(totalNetTubo);
+  document.getElementById('ledger-shipping-sales').textContent = formatPeso(totalShippingIncome);
   document.getElementById('ledger-gross-total').textContent = formatPeso(grossVolume);
-  document.getElementById('ledger-commission-deduct').textContent = '-' + formatPeso(totalCommission);
-  document.getElementById('ledger-net-profit').textContent = formatPeso(totalNet);
-  document.getElementById('ledger-delivered-net').textContent = formatPeso(deliveredNet);
-  document.getElementById('ledger-pending-net').textContent = formatPeso(pendingNet);
+  document.getElementById('ledger-delivered-net').textContent = formatPeso(deliveredNetTubo);
+  document.getElementById('ledger-pending-net').textContent = formatPeso(pendingNetTubo);
 
+  // Update Pie Chart (Net Tubo vs Puhunan vs Admin Fee vs Hiwalay na Shipping)
   const ctx = document.getElementById('seller-income-pie-chart');
   if (ctx && window.Chart) {
     if (state.incomePieChartInstance) state.incomePieChartInstance.destroy();
-    const netProductShare = Math.max(0, productSales - totalCommission);
+    const safeNetTubo = Math.max(0, totalNetTubo);
+    const hasData = (safeNetTubo + totalCapitalCost + totalAdminFee + totalShippingIncome) > 0;
     state.incomePieChartInstance = new Chart(ctx, {
       type: 'pie',
       data: {
-        labels: ['Net Product Earnings', 'Delivery Fees Collected', 'Admin Commission (10%)'],
+        labels: ['Net Tubo (Kita)', 'Puhunan (Capital)', 'Admin Fee (10%)', 'Shipping Income (Hiwalay)'],
         datasets: [{
-          data: grossVolume > 0 ? [netProductShare, shippingSales, totalCommission] : [1, 0, 0],
-          backgroundColor: ['#16a34a', '#0ea5e9', '#f59e0b'],
+          data: hasData ? [safeNetTubo, totalCapitalCost, totalAdminFee, totalShippingIncome] : [1, 0, 0, 0],
+          backgroundColor: ['#16a34a', '#64748b', '#f59e0b', '#0ea5e9'],
           borderWidth: 2,
           borderColor: '#ffffff'
         }]
@@ -220,37 +313,82 @@ export function renderSellerIncomeAnalytics() {
     });
   }
 
-  const tbody = document.getElementById('seller-income-table-body');
-  if (!activeOrders.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);">No completed or active orders yet.</td></tr>`;
-    return;
+  // Render Product Rate / Top Earning Products Table
+  const rateTbody = document.getElementById('seller-product-rate-tbody');
+  const rankedProducts = Array.from(productPerfMap.values()).sort((a, b) => b.netTubo - a.netTubo || b.unitsSold - a.unitsSold);
+
+  if (!rankedProducts.length) {
+    rateTbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);">No products or sales data available yet.</td></tr>`;
+  } else {
+    rateTbody.innerHTML = rankedProducts.map((p, idx) => {
+      const marginPct = p.productSales > 0 ? ((p.netTubo / p.productSales) * 100).toFixed(1) : '0.0';
+      const rankBadge = idx === 0 && p.netTubo > 0
+        ? '<span class="badge seller">🥇 #1 Top Earner</span>'
+        : idx === 1 && p.netTubo > 0
+          ? '<span class="badge">🥈 #2</span>'
+          : idx === 2 && p.netTubo > 0
+            ? '<span class="badge">🥉 #3</span>'
+            : `#${idx + 1}`;
+      const starDisplay = p.ratingCount > 0
+        ? `<strong style="color:#d97706;">${p.ratingAvg.toFixed(1)} ★</strong> <span style="font-size:0.72rem;color:var(--muted);">(${p.ratingCount})</span>`
+        : `<span style="font-size:0.74rem;color:var(--muted);">No ratings yet</span>`;
+
+      return `
+        <tr>
+          <td>${rankBadge}</td>
+          <td><strong>${escapeHtml(p.title)}</strong></td>
+          <td>${starDisplay}</td>
+          <td><strong>${p.unitsSold}</strong> sold</td>
+          <td>${formatPeso(p.productSales)}</td>
+          <td style="color:#475569;">${formatPeso(p.totalCapital)}</td>
+          <td style="color:var(--danger);">-${formatPeso(p.adminFee)}</td>
+          <td style="color:${p.netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:800;">${formatPeso(p.netTubo)}</td>
+          <td><span class="badge ${Number(marginPct) >= 15 ? 'ship-free' : ''}">${marginPct}%</span></td>
+        </tr>
+      `;
+    }).join('');
   }
 
-  tbody.innerHTML = activeOrders.map(o => {
-    const gross = Number(o.total_amount || 0);
-    const comm = Number(o.admin_commission ?? (gross * COMMISSION_RATE));
-    const net = Number(o.seller_net_earnings ?? (gross - comm));
-    return `
-      <tr>
-        <td><strong>#${escapeHtml(String(o.id).slice(0, 8).toUpperCase())}</strong></td>
-        <td>${new Date(o.created_at).toLocaleDateString()}</td>
-        <td><span class="badge status-${escapeHtml(o.status)}">${escapeHtml(o.status)}</span></td>
-        <td>${escapeHtml(o.payment_method || 'COD')}</td>
-        <td>${formatPeso(gross)}</td>
-        <td style="color:var(--danger);">-${formatPeso(comm)}</td>
-        <td style="color:var(--primary-dark);font-weight:700;">${formatPeso(net)}</td>
-      </tr>
-    `;
-  }).join('');
+  // Render Per-Order Table
+  const tbody = document.getElementById('seller-income-table-body');
+  if (!orderRowsHtml.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);">No completed or active orders yet.</td></tr>`;
+  } else {
+    tbody.innerHTML = orderRowsHtml.join('');
+  }
+}
+
+// =========================================================
+// PRODUCT POST, PUHUNAN/TUBO CALCULATOR, STOCKS & FREE SHIP
+// =========================================================
+export function toggleProductShippingFeeInput() {
+  const isFree = document.getElementById('prod-is-free-ship').value === 'true';
+  const feeInput = document.getElementById('prod-shipping-fee');
+  const feeWrap = document.getElementById('prod-shipping-fee-wrap');
+  if (isFree) {
+    feeInput.value = 0;
+    feeInput.disabled = true;
+    feeWrap.style.opacity = '0.55';
+  } else {
+    feeInput.disabled = false;
+    feeWrap.style.opacity = '1';
+  }
 }
 
 export function updateProductProfitPreview() {
   const price = Number(document.getElementById('prod-price').value || 0);
+  const cost = Number(document.getElementById('prod-cost-price')?.value || 0);
   const comm = price * COMMISSION_RATE;
-  const net = price - comm;
+  const netTubo = price - cost - comm;
+
   document.getElementById('prev-sell-price').textContent = formatPeso(price);
+  if (document.getElementById('prev-cost-price')) {
+    document.getElementById('prev-cost-price').textContent = formatPeso(cost);
+  }
   document.getElementById('prev-comm-fee').textContent = formatPeso(comm);
-  document.getElementById('prev-net-unit').textContent = formatPeso(net);
+  const netEl = document.getElementById('prev-net-unit');
+  netEl.textContent = formatPeso(netTubo);
+  netEl.style.color = netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)';
 }
 
 export function triggerSlotFile(slotIdx) {
@@ -301,15 +439,20 @@ export async function saveProduct(e) {
 
   const editId = document.getElementById('edit-product-id').value;
   const validPhotos = state.productPhotoSlots.filter(Boolean);
+  const isFreeShip = document.getElementById('prod-is-free-ship').value === 'true';
+  const shipFeeVal = isFreeShip ? 0 : Number(document.getElementById('prod-shipping-fee').value || 0);
+
   const payload = {
     seller_id: state.currentUser.id,
     shop_name: state.currentSellerRecord?.shop_name || state.currentProfile?.full_name || 'Seller Shop',
     title: document.getElementById('prod-title').value.trim(),
     category: document.getElementById('prod-category').value,
+    cost_price: Number(document.getElementById('prod-cost-price').value || 0),
     price: Number(document.getElementById('prod-price').value),
     stock: parseInt(document.getElementById('prod-stock').value, 10) || 0,
     delivery_area: document.getElementById('prod-area').value.trim() || state.currentSellerRecord?.location || 'All Areas',
-    shipping_fee: Number(document.getElementById('prod-shipping-fee').value || 0),
+    is_free_shipping: isFreeShip,
+    shipping_fee: shipFeeVal,
     description: document.getElementById('prod-desc').value.trim(),
     image_url: validPhotos[0] || '',
     extra_images: validPhotos.slice(1)
@@ -331,6 +474,7 @@ export async function saveProduct(e) {
     resetProductForm();
     await loadMarketplaceData();
     renderSellerProductsTable();
+    renderSellerIncomeAnalytics();
   } catch (err) {
     showToast(err.message || 'Failed to save product', 'error');
   } finally {
@@ -344,10 +488,16 @@ export function editSellerProduct(productId) {
   document.getElementById('edit-product-id').value = prod.id;
   document.getElementById('prod-title').value = prod.title || '';
   document.getElementById('prod-category').value = prod.category || CATEGORIES[1];
+  document.getElementById('prod-cost-price').value = prod.cost_price ?? 0;
   document.getElementById('prod-price').value = prod.price || '';
   document.getElementById('prod-stock').value = prod.stock ?? 0;
   document.getElementById('prod-area').value = prod.delivery_area || '';
-  document.getElementById('prod-shipping-fee').value = prod.shipping_fee ?? 0;
+
+  const isFree = prod.is_free_shipping === true || Number(prod.shipping_fee || 0) === 0;
+  document.getElementById('prod-is-free-ship').value = isFree ? 'true' : 'false';
+  document.getElementById('prod-shipping-fee').value = isFree ? 0 : (prod.shipping_fee ?? 0);
+  toggleProductShippingFeeInput();
+
   document.getElementById('prod-desc').value = prod.description || '';
 
   const imgs = getProductImages(prod);
@@ -355,21 +505,66 @@ export function editSellerProduct(productId) {
   refreshPhotoSlotsUI();
   updateProductProfitPreview();
 
-  document.getElementById('product-form-heading').textContent = 'Edit Product Listing';
+  document.getElementById('product-form-heading').textContent = '✏️ Edit Product Listing';
   document.getElementById('cancel-edit-btn').classList.remove('hidden');
   document.getElementById('save-product-btn').textContent = '💾 Update Product';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.getElementById('seller-product-form-panel')?.scrollIntoView({ behavior: 'smooth' });
 }
 
 export function resetProductForm() {
   document.getElementById('product-form').reset();
   document.getElementById('edit-product-id').value = '';
+  document.getElementById('prod-cost-price').value = 0;
+  document.getElementById('prod-is-free-ship').value = 'false';
+  toggleProductShippingFeeInput();
   state.productPhotoSlots = [null, null];
   refreshPhotoSlotsUI();
   updateProductProfitPreview();
-  document.getElementById('product-form-heading').textContent = 'Add New Product Listing';
+  document.getElementById('product-form-heading').textContent = '➕ Post New Product';
   document.getElementById('cancel-edit-btn').classList.add('hidden');
   document.getElementById('save-product-btn').textContent = '💾 Save & Publish Product';
+}
+
+export async function adjustProductStock(productId, delta) {
+  const prod = state.allProducts.find(p => String(p.id) === String(productId));
+  if (!prod) return;
+  const newStock = Math.max(0, Number(prod.stock || 0) + delta);
+  const { error } = await supabaseClient.from('products').update({ stock: newStock }).eq('id', productId);
+  if (error) return showToast(error.message, 'error');
+  prod.stock = newStock;
+  renderSellerProductsTable();
+  showToast(`Stock updated to ${newStock}.`);
+}
+
+export async function setDirectProductStock(productId, rawVal) {
+  const newStock = Math.max(0, parseInt(rawVal, 10) || 0);
+  const { error } = await supabaseClient.from('products').update({ stock: newStock }).eq('id', productId);
+  if (error) return showToast(error.message, 'error');
+  const prod = state.allProducts.find(p => String(p.id) === String(productId));
+  if (prod) prod.stock = newStock;
+  renderSellerProductsTable();
+  showToast(`Stock set to ${newStock}.`);
+}
+
+export async function toggleProductFreeShipping(productId) {
+  const prod = state.allProducts.find(p => String(p.id) === String(productId));
+  if (!prod) return;
+
+  const currentlyFree = prod.is_free_shipping === true || Number(prod.shipping_fee || 0) === 0;
+  const makeFree = !currentlyFree;
+  const fallbackFee = Number(state.currentSellerRecord?.default_shipping_fee || 50);
+  const newFee = makeFree ? 0 : (fallbackFee > 0 ? fallbackFee : 50);
+
+  const { error } = await supabaseClient
+    .from('products')
+    .update({ is_free_shipping: makeFree, shipping_fee: newFee })
+    .eq('id', productId);
+
+  if (error) return showToast(error.message, 'error');
+  prod.is_free_shipping = makeFree;
+  prod.shipping_fee = newFee;
+  renderSellerProductsTable();
+  showToast(makeFree ? 'Item set to Free Shipping!' : `Item set to With Shipping Fee (${formatPeso(newFee)}).`);
 }
 
 export async function deleteSellerProduct(productId) {
@@ -383,24 +578,54 @@ export async function deleteSellerProduct(productId) {
 
 export function renderSellerProductsTable() {
   const tbody = document.getElementById('seller-products-tbody');
-  const myProds = state.allProducts.filter(p => p.seller_id === state.currentUser?.id);
+  if (!tbody) return;
+
+  const shipFilter = document.getElementById('seller-prod-ship-filter')?.value || 'all';
+  let myProds = state.allProducts.filter(p => p.seller_id === state.currentUser?.id);
+
+  if (shipFilter === 'free') {
+    myProds = myProds.filter(p => p.is_free_shipping === true || Number(p.shipping_fee || 0) === 0);
+  } else if (shipFilter === 'paid') {
+    myProds = myProds.filter(p => p.is_free_shipping !== true && Number(p.shipping_fee || 0) > 0);
+  }
+
   document.getElementById('seller-products-count').textContent = `${myProds.length} Item${myProds.length === 1 ? '' : 's'}`;
 
   if (!myProds.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);">No products published yet. Use the form above to add your first item!</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);">No products found for this filter. Use the form below to post an item!</td></tr>`;
     return;
   }
 
   tbody.innerHTML = myProds.map(p => {
-    const net = Number(p.price) * (1 - COMMISSION_RATE);
+    const price = Number(p.price || 0);
+    const cost = Number(p.cost_price || 0);
+    const comm = price * COMMISSION_RATE;
+    const netTubo = price - cost - comm;
+    const isFree = p.is_free_shipping === true || Number(p.shipping_fee || 0) === 0;
+    const stockVal = Number(p.stock ?? 0);
+
     return `
       <tr>
         <td><img src="${escapeHtml(getProductImages(p)[0])}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" /></td>
-        <td><strong>${escapeHtml(p.title)}</strong></td>
-        <td>${escapeHtml(p.category)}</td>
-        <td>${formatPeso(p.price)}</td>
-        <td style="color:var(--primary-dark);font-weight:700;">${formatPeso(net)}</td>
-        <td>${Number(p.stock ?? 0)}</td>
+        <td>
+          <strong>${escapeHtml(p.title)}</strong>
+          <div style="font-size:0.72rem;color:var(--muted);">${escapeHtml(p.category || '')}</div>
+        </td>
+        <td style="color:#475569;">${formatPeso(cost)}</td>
+        <td><strong>${formatPeso(price)}</strong></td>
+        <td style="color:${netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(netTubo)}</td>
+        <td>
+          <button type="button" class="sm ${isFree ? 'success-btn' : 'secondary'}" onclick="toggleProductFreeShipping('${escapeHtml(p.id)}')" title="Click to switch between Free Shipping and With Shipping Fee">
+            ${isFree ? '🚚 Free Shipping' : `📦 With Fee (${formatPeso(p.shipping_fee)})`}
+          </button>
+        </td>
+        <td>
+          <div style="display:flex;align-items:center;gap:0.25rem;">
+            <button type="button" class="secondary sm" style="padding:0.2rem 0.5rem;" onclick="adjustProductStock('${escapeHtml(p.id)}', -1)">−</button>
+            <input type="number" min="0" value="${stockVal}" onchange="setDirectProductStock('${escapeHtml(p.id)}', this.value)" style="width:58px;text-align:center;padding:0.22rem;font-size:0.8rem;" />
+            <button type="button" class="secondary sm" style="padding:0.2rem 0.5rem;" onclick="adjustProductStock('${escapeHtml(p.id)}', 1)">+</button>
+          </div>
+        </td>
         <td>
           <div style="display:flex;gap:0.35rem;">
             <button class="secondary sm" onclick="editSellerProduct('${escapeHtml(p.id)}')">Edit</button>
@@ -506,6 +731,7 @@ Object.assign(window, {
   renderSellerOrders,
   verifyQrPayment,
   updateSellerOrderStatus,
+  toggleProductShippingFeeInput,
   updateProductProfitPreview,
   triggerSlotFile,
   handleSlotFileChange,
@@ -513,7 +739,11 @@ Object.assign(window, {
   saveProduct,
   editSellerProduct,
   resetProductForm,
+  adjustProductStock,
+  setDirectProductStock,
+  toggleProductFreeShipping,
   deleteSellerProduct,
+  renderSellerProductsTable,
   addBarangayRate,
   removeBarangayRate,
   handleSellerQrUpload,
