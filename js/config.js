@@ -1,8 +1,8 @@
 // =========================================================
 // SUPABASE CONFIGURATION, CONSTANTS & SHARED STATE
 // =========================================================
-export const SUPABASE_URL = 'https://tvueqgzmsbpmtrnkjitn.supabase.co';
-export const SUPABASE_ANON_KEY = 'sb_publishable_Yvbk_uPNOu_ZNGOTNXpLIw_urRuUer2';
+export const SUPABASE_URL = 'https://bitgjlitbtntueoemukz.supabase.co';
+export const SUPABASE_ANON_KEY = 'sb_publishable_oabcYDwri95eL_BCmMEqvA_A-1XfaQB';
 
 export const supabaseClient = (window.supabase && SUPABASE_URL.startsWith('https://'))
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
