@@ -8,6 +8,7 @@ import { updateCartBadge } from './cart.js';
 import { loadNotifications, loadChatMessages } from './chat.js';
 import { switchView } from './navigation.js';
 
+const SUPER_ADMIN_EMAILS = ['giboaniel@gmail.com'];
 let authMode = 'signin';
 
 export function openAuthModal(mode = 'signin') {
@@ -24,8 +25,8 @@ export function switchAuthTab(mode) {
   document.getElementById('tab-signin')?.classList.toggle('active', mode === 'signin');
   document.getElementById('tab-signup')?.classList.toggle('active', mode === 'signup');
   document.getElementById('signup-name-wrap')?.classList.toggle('hidden', mode !== 'signup');
-  const submitBtn = document.getElementById('auth-submit-btn');
-  if (submitBtn) submitBtn.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+  const btn = document.getElementById('auth-submit-btn');
+  if (btn) btn.textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
 }
 
 export async function signInWithGoogle() {
@@ -54,12 +55,13 @@ export async function handleAuthSubmit(e) {
         options: { data: { full_name: fullName || email.split('@')[0] } }
       });
       if (error) throw error;
+      const defaultRole = SUPER_ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'buyer';
       if (data.user) {
         await supabaseClient.from('profiles').upsert({
           id: data.user.id,
           email,
           full_name: fullName || email.split('@')[0],
-          role: 'buyer'
+          role: defaultRole
         });
       }
       showToast('Account created! You are now signed in.');
@@ -98,17 +100,16 @@ export async function loadUserSession() {
   state.currentUser = session?.user || null;
 
   if (state.currentUser) {
-    let { data: prof, error: profErr } = await supabaseClient
+    const userEmail = (state.currentUser.email || '').toLowerCase();
+    const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(userEmail);
+
+    let { data: prof } = await supabaseClient
       .from('profiles')
       .select('*')
       .eq('id', state.currentUser.id)
       .maybeSingle();
 
-    if (profErr) {
-      console.error('Profile fetch error:', profErr);
-    }
-
-    if (!prof && !profErr) {
+    if (!prof) {
       const newProf = {
         id: state.currentUser.id,
         email: state.currentUser.email,
@@ -116,25 +117,16 @@ export async function loadUserSession() {
           state.currentUser.user_metadata?.full_name ||
           state.currentUser.user_metadata?.name ||
           state.currentUser.email.split('@')[0],
-        role: 'buyer'
+        role: isSuperAdmin ? 'admin' : 'buyer'
       };
-      const { data: inserted } = await supabaseClient
-        .from('profiles')
-        .upsert(newProf, { onConflict: 'id' })
-        .select('*')
-        .maybeSingle();
-      prof = inserted || newProf;
+      await supabaseClient.from('profiles').upsert(newProf);
+      prof = newProf;
+    } else if (isSuperAdmin && prof.role !== 'admin') {
+      await supabaseClient.from('profiles').update({ role: 'admin' }).eq('id', state.currentUser.id);
+      prof.role = 'admin';
     }
 
-    state.currentProfile = prof || {
-      id: state.currentUser.id,
-      email: state.currentUser.email,
-      full_name:
-        state.currentUser.user_metadata?.full_name ||
-        state.currentUser.user_metadata?.name ||
-        state.currentUser.email.split('@')[0],
-      role: 'buyer'
-    };
+    state.currentProfile = prof;
 
     const { data: sellerRec } = await supabaseClient
       .from('sellers')
@@ -163,9 +155,10 @@ export function updateAuthUI() {
   document.getElementById('nav-chat-btn')?.classList.toggle('hidden', !loggedIn);
   document.getElementById('notif-wrapper')?.classList.toggle('hidden', !loggedIn);
 
+  const userEmail = (state.currentUser?.email || '').toLowerCase();
   const role = String(state.currentProfile?.role || 'buyer').trim().toLowerCase();
   const isApprovedSeller = role === 'seller' || state.currentSellerRecord?.status === 'approved';
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin' || SUPER_ADMIN_EMAILS.includes(userEmail);
 
   document.getElementById('nav-seller-btn')?.classList.toggle('hidden', !(loggedIn && (isApprovedSeller || isAdmin)));
   document.getElementById('nav-apply-seller-btn')?.classList.toggle('hidden', !(loggedIn && !isApprovedSeller && !isAdmin));
