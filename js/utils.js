@@ -1,7 +1,9 @@
 // =========================================================
-// SHARED UTILITY & FORMATTING HELPERS
+// SHARED UTILITY, IMAGE COMPRESSION & BUCKET UPLOAD HELPERS
 // =========================================================
-import { PLACEHOLDER_IMG } from './config.js';
+import { supabaseClient, PLACEHOLDER_IMG } from './config.js';
+
+export const STORAGE_BUCKET = 'markethub-images';
 
 export function showToast(msg, type = 'success') {
   const box = document.getElementById('toast-container');
@@ -38,7 +40,7 @@ export function getProductImages(prod) {
   return imgs.slice(0, 2);
 }
 
-export function compressImageToDataUrl(file, maxDim = 900, quality = 0.78) {
+export function compressImageToBlob(file, maxDim = 900, quality = 0.78) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -58,7 +60,11 @@ export function compressImageToDataUrl(file, maxDim = 900, quality = 0.78) {
         canvas.width = width;
         canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error('Compression failed'))),
+          'image/jpeg',
+          quality
+        );
       };
       img.onerror = reject;
       img.src = ev.target.result;
@@ -66,4 +72,23 @@ export function compressImageToDataUrl(file, maxDim = 900, quality = 0.78) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+export async function uploadCompressedImageToBucket(file, folder = 'products', maxDim = 900, quality = 0.78) {
+  if (!supabaseClient) throw new Error('Supabase is not configured.');
+  const compressedBlob = await compressImageToBlob(file, maxDim, quality);
+  const uniqueName = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+
+  const { error: uploadError } = await supabaseClient.storage
+    .from(STORAGE_BUCKET)
+    .upload(uniqueName, compressedBlob, {
+      contentType: 'image/jpeg',
+      cacheControl: '3600',
+      upsert: false
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabaseClient.storage.from(STORAGE_BUCKET).getPublicUrl(uniqueName);
+  return data.publicUrl;
 }
