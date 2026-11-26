@@ -1,8 +1,15 @@
 // =========================================================
-// SELLER APPLICATION, SELLER CENTRE (4 TABS) & INCOME ANALYTICS
+// SELLER APPLICATION, SELLER CENTRE (5 TABS) & INCOME ANALYTICS
 // =========================================================
 import { supabaseClient, COMMISSION_RATE, CATEGORIES, state } from './config.js';
-import { escapeHtml, formatPeso, getProductImages, uploadCompressedImageToBucket, showToast } from './utils.js';
+import {
+  escapeHtml,
+  formatPeso,
+  getProductImages,
+  uploadCompressedImageToBucket,
+  deleteImagesFromBucket,
+  showToast
+} from './utils.js';
 import { openAuthModal, loadUserSession } from './auth.js';
 import { loadMarketplaceData } from './marketplace.js';
 
@@ -35,13 +42,14 @@ export async function submitSellerApplication(e) {
   showToast('Seller application submitted! Awaiting admin approval.');
   await loadUserSession();
 }
+
 export function switchSellerTab(tab) {
-  ['home', 'income', 'products', 'shipping'].forEach(t => {
+  ['home', 'my-products', 'products', 'income', 'shipping'].forEach(t => {
     document.getElementById(`seller-tab-${t}`)?.classList.toggle('hidden', t !== tab);
     document.getElementById(`seller-nav-${t}`)?.classList.toggle('active', t === tab);
   });
+  if (tab === 'my-products') renderSellerProductsTable();
   if (tab === 'income') renderSellerIncomeAnalytics();
-  if (tab === 'products') renderSellerProductsTable();
 }
 
 export async function loadSellerDashboard() {
@@ -160,8 +168,8 @@ export async function updateSellerOrderStatus(orderId, newStatus) {
 }
 
 // =========================================================
-// INCOME MONITORING: PUHUNAN + TUBO (LESS ADMIN FEE),
-// BUKOD NA RIDER SHIPPING, & DAILY TO MONTHLY PRODUCT SALES
+// INCOME MONITORING: CAPITAL + NET PROFIT (LESS ADMIN FEE),
+// SEPARATE RIDER SHIPPING, & DAILY TO MONTHLY PRODUCT SALES
 // =========================================================
 let incomeGroupMode = 'daily';
 
@@ -195,8 +203,8 @@ export function setIncomeGroupMode(mode) {
 function filterOrdersBySelectedPeriod(orders) {
   const period = document.getElementById('income-period-filter')?.value || 'all';
   const now = new Date();
-  const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD
-  const currentMonthStr = todayStr.slice(0, 7); // YYYY-MM
+  const todayStr = now.toLocaleDateString('en-CA');
+  const currentMonthStr = todayStr.slice(0, 7);
 
   if (period === 'today') {
     return orders.filter(o => new Date(o.created_at).toLocaleDateString('en-CA') === todayStr);
@@ -229,7 +237,6 @@ export function renderSellerIncomeAnalytics() {
   const prodCatalogMap = new Map();
   myProds.forEach(p => prodCatalogMap.set(String(p.id), p));
 
-  // Per-product performance tracker
   const productPerfMap = new Map();
   myProds.forEach(p => {
     productPerfMap.set(String(p.id), {
@@ -241,25 +248,24 @@ export function renderSellerIncomeAnalytics() {
       productSales: 0,
       totalCapital: 0,
       adminFee: 0,
-      netTubo: 0,
+      netProfit: 0,
       sellerPayout: 0
     });
   });
 
-  // Daily / Monthly grouping map
   const periodSummaryMap = new Map();
 
   let totalProductSales = 0;
   let totalCapitalCost = 0;
   let totalRiderShipping = 0;
   let totalAdminFee = 0;
-  let totalNetTubo = 0;
+  let totalNetProfit = 0;
   let totalSellerPayout = 0;
 
   let deliveredPayout = 0;
-  let deliveredNetTubo = 0;
+  let deliveredNetProfit = 0;
   let pendingPayout = 0;
-  let pendingNetTubo = 0;
+  let pendingNetProfit = 0;
 
   const orderRowsHtml = activeOrders.map(o => {
     const items = Array.isArray(o.items) ? o.items : [];
@@ -277,8 +283,8 @@ export function renderSellerIncomeAnalytics() {
       const unitCost = Number(item.cost_price ?? catalogProd?.cost_price ?? 0);
       const itemLineCost = unitCost * qty;
       const itemLineComm = itemLineSales * COMMISSION_RATE;
-      const itemLineNetTubo = itemLineSales - itemLineCost - itemLineComm;
-      const itemLineSellerPayout = itemLineCost + itemLineNetTubo; // Puhunan + Net Tubo
+      const itemLineNetProfit = itemLineSales - itemLineCost - itemLineComm;
+      const itemLineSellerPayout = itemLineCost + itemLineNetProfit;
 
       orderCapital += itemLineCost;
 
@@ -293,7 +299,7 @@ export function renderSellerIncomeAnalytics() {
           productSales: 0,
           totalCapital: 0,
           adminFee: 0,
-          netTubo: 0,
+          netProfit: 0,
           sellerPayout: 0
         });
       }
@@ -302,31 +308,29 @@ export function renderSellerIncomeAnalytics() {
       perf.productSales += itemLineSales;
       perf.totalCapital += itemLineCost;
       perf.adminFee += itemLineComm;
-      perf.netTubo += itemLineNetTubo;
+      perf.netProfit += itemLineNetProfit;
       perf.sellerPayout += itemLineSellerPayout;
     });
 
-    // 10% Admin fee is deducted from Product Sales ONLY (Rider shipping is separate)
     const orderAdminFee = Number(o.admin_commission ?? (prodSales * COMMISSION_RATE));
-    const orderNetTubo = prodSales - orderCapital - orderAdminFee;
-    const orderSellerPayout = prodSales - orderAdminFee; // Equals Puhunan + Net Tubo
+    const orderNetProfit = prodSales - orderCapital - orderAdminFee;
+    const orderSellerPayout = prodSales - orderAdminFee;
 
     totalProductSales += prodSales;
     totalCapitalCost += orderCapital;
     totalRiderShipping += riderShipFee;
     totalAdminFee += orderAdminFee;
-    totalNetTubo += orderNetTubo;
+    totalNetProfit += orderNetProfit;
     totalSellerPayout += orderSellerPayout;
 
     if (o.status === 'delivered') {
       deliveredPayout += orderSellerPayout;
-      deliveredNetTubo += orderNetTubo;
+      deliveredNetProfit += orderNetProfit;
     } else {
       pendingPayout += orderSellerPayout;
-      pendingNetTubo += orderNetTubo;
+      pendingNetProfit += orderNetProfit;
     }
 
-    // Group into Daily or Monthly bucket
     const dObj = new Date(o.created_at);
     const periodKey = incomeGroupMode === 'monthly'
       ? dObj.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
@@ -341,7 +345,7 @@ export function renderSellerIncomeAnalytics() {
         sortStamp,
         orderCount: 0,
         capital: 0,
-        netTubo: 0,
+        netProfit: 0,
         adminFee: 0,
         sellerPayout: 0,
         riderShipping: 0,
@@ -351,7 +355,7 @@ export function renderSellerIncomeAnalytics() {
     const bucket = periodSummaryMap.get(periodKey);
     bucket.orderCount += 1;
     bucket.capital += orderCapital;
-    bucket.netTubo += orderNetTubo;
+    bucket.netProfit += orderNetProfit;
     bucket.adminFee += orderAdminFee;
     bucket.sellerPayout += orderSellerPayout;
     bucket.riderShipping += riderShipFee;
@@ -368,7 +372,7 @@ export function renderSellerIncomeAnalytics() {
         <td>${formatPeso(prodSales)}</td>
         <td style="color:#475569;">${formatPeso(orderCapital)}</td>
         <td style="color:var(--danger);">-${formatPeso(orderAdminFee)}</td>
-        <td style="color:${orderNetTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(orderNetTubo)}</td>
+        <td style="color:${orderNetProfit >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(orderNetProfit)}</td>
         <td style="background:#f0fdf4;color:var(--primary-deep);font-weight:800;">${formatPeso(orderSellerPayout)}</td>
         <td style="color:#0284c7;font-weight:600;">${formatPeso(riderShipFee)}</td>
       </tr>
@@ -377,38 +381,35 @@ export function renderSellerIncomeAnalytics() {
 
   const grossCollectedFromBuyers = totalProductSales + totalRiderShipping;
 
-  // Update Top KPI Cards
   document.getElementById('inc-kpi-seller-payout').textContent = formatPeso(totalSellerPayout);
   document.getElementById('inc-kpi-capital').textContent = formatPeso(totalCapitalCost);
-  document.getElementById('inc-kpi-net-tubo').textContent = formatPeso(totalNetTubo);
+  document.getElementById('inc-kpi-net-tubo').textContent = formatPeso(totalNetProfit);
   document.getElementById('inc-kpi-commission').textContent = '-' + formatPeso(totalAdminFee);
   document.getElementById('inc-kpi-shipping').textContent = formatPeso(totalRiderShipping);
 
-  // Update Statement Ledger
   document.getElementById('ledger-product-sales').textContent = formatPeso(totalProductSales);
   document.getElementById('ledger-commission-deduct').textContent = '-' + formatPeso(totalAdminFee);
   document.getElementById('ledger-seller-payout').textContent = formatPeso(totalSellerPayout);
   document.getElementById('ledger-capital-cost').textContent = formatPeso(totalCapitalCost);
-  document.getElementById('ledger-net-tubo').textContent = formatPeso(totalNetTubo);
+  document.getElementById('ledger-net-tubo').textContent = formatPeso(totalNetProfit);
   document.getElementById('ledger-shipping-sales').textContent = formatPeso(totalRiderShipping);
   document.getElementById('ledger-gross-total').textContent = formatPeso(grossCollectedFromBuyers);
   document.getElementById('ledger-delivered-payout').textContent = formatPeso(deliveredPayout);
-  document.getElementById('ledger-delivered-net').textContent = formatPeso(deliveredNetTubo);
+  document.getElementById('ledger-delivered-net').textContent = formatPeso(deliveredNetProfit);
   document.getElementById('ledger-pending-payout').textContent = formatPeso(pendingPayout);
-  document.getElementById('ledger-pending-net').textContent = formatPeso(pendingNetTubo);
+  document.getElementById('ledger-pending-net').textContent = formatPeso(pendingNetProfit);
 
-  // Update Pie Chart (Puhunan + Net Tubo vs Admin Fee vs Bukod na Rider Shipping)
   const ctx = document.getElementById('seller-income-pie-chart');
   if (ctx && window.Chart) {
     if (state.incomePieChartInstance) state.incomePieChartInstance.destroy();
-    const safeNetTubo = Math.max(0, totalNetTubo);
-    const hasData = (safeNetTubo + totalCapitalCost + totalAdminFee + totalRiderShipping) > 0;
+    const safeNetProfit = Math.max(0, totalNetProfit);
+    const hasData = (safeNetProfit + totalCapitalCost + totalAdminFee + totalRiderShipping) > 0;
     state.incomePieChartInstance = new Chart(ctx, {
       type: 'pie',
       data: {
-        labels: ['Net Tubo (Kita)', 'Puhunan (Capital)', 'Admin Fee (10%)', 'Rider Shipping (Bukod)'],
+        labels: ['Net Profit', 'Capital Cost', 'Admin Fee (10%)', 'Rider Shipping (Separate)'],
         datasets: [{
-          data: hasData ? [safeNetTubo, totalCapitalCost, totalAdminFee, totalRiderShipping] : [1, 0, 0, 0],
+          data: hasData ? [safeNetProfit, totalCapitalCost, totalAdminFee, totalRiderShipping] : [1, 0, 0, 0],
           backgroundColor: ['#16a34a', '#64748b', '#f59e0b', '#0ea5e9'],
           borderWidth: 2,
           borderColor: '#ffffff'
@@ -423,12 +424,11 @@ export function renderSellerIncomeAnalytics() {
     });
   }
 
-  // Render Daily / Monthly Summary Table
   const periodTbody = document.getElementById('seller-period-summary-tbody');
   const sortedPeriods = Array.from(periodSummaryMap.values()).sort((a, b) => b.sortStamp.localeCompare(a.sortStamp));
 
   if (!sortedPeriods.length) {
-    periodTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);">Walang benta sa napiling petsa o buwan.</td></tr>`;
+    periodTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);">No sales recorded for the selected date or month.</td></tr>`;
   } else {
     periodTbody.innerHTML = sortedPeriods.map(row => {
       const topEntry = Object.entries(row.itemQtyMap).sort((a, b) => b[1] - a[1])[0];
@@ -439,7 +439,7 @@ export function renderSellerIncomeAnalytics() {
           <td>${row.orderCount}</td>
           <td><span class="badge ship-free">🔥 ${topProdLabel}</span></td>
           <td style="color:#475569;">${formatPeso(row.capital)}</td>
-          <td style="color:${row.netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(row.netTubo)}</td>
+          <td style="color:${row.netProfit >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(row.netProfit)}</td>
           <td style="color:var(--danger);">-${formatPeso(row.adminFee)}</td>
           <td style="background:#f0fdf4;color:var(--primary-deep);font-weight:800;">${formatPeso(row.sellerPayout)}</td>
           <td style="color:#0284c7;font-weight:600;">${formatPeso(row.riderShipping)}</td>
@@ -448,16 +448,15 @@ export function renderSellerIncomeAnalytics() {
     }).join('');
   }
 
-  // Render Best-Selling & Top Earning Products Ranking Table
   const rateTbody = document.getElementById('seller-product-rate-tbody');
-  const rankedProducts = Array.from(productPerfMap.values()).sort((a, b) => b.unitsSold - a.unitsSold || b.netTubo - a.netTubo);
+  const rankedProducts = Array.from(productPerfMap.values()).sort((a, b) => b.unitsSold - a.unitsSold || b.netProfit - a.netProfit);
 
   if (!rankedProducts.length) {
     rateTbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);">No products or sales data available yet.</td></tr>`;
   } else {
     rateTbody.innerHTML = rankedProducts.map((p, idx) => {
       const rankBadge = idx === 0 && p.unitsSold > 0
-        ? '<span class="badge seller">🥇 #1 Malakas Bumenta</span>'
+        ? '<span class="badge seller">🥇 #1 Best Seller</span>'
         : idx === 1 && p.unitsSold > 0
           ? '<span class="badge">🥈 #2</span>'
           : idx === 2 && p.unitsSold > 0
@@ -476,23 +475,23 @@ export function renderSellerIncomeAnalytics() {
           <td>${formatPeso(p.productSales)}</td>
           <td style="color:#475569;">${formatPeso(p.totalCapital)}</td>
           <td style="color:var(--danger);">-${formatPeso(p.adminFee)}</td>
-          <td style="color:${p.netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(p.netTubo)}</td>
+          <td style="color:${p.netProfit >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(p.netProfit)}</td>
           <td style="background:#f0fdf4;color:var(--primary-deep);font-weight:800;">${formatPeso(p.sellerPayout)}</td>
         </tr>
       `;
     }).join('');
   }
 
-  // Render Per-Order Breakdown Table
   const tbody = document.getElementById('seller-income-table-body');
   if (!orderRowsHtml.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);">Walang orders sa napiling filter.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);">No orders found for the selected filter.</td></tr>`;
   } else {
     tbody.innerHTML = orderRowsHtml.join('');
   }
 }
+
 // =========================================================
-// PRODUCT POST, PUHUNAN/TUBO CALCULATOR, STOCKS & FREE SHIP
+// PRODUCT POST, CAPITAL/PROFIT CALCULATOR, STOCKS & FREE SHIP
 // =========================================================
 export function toggleProductShippingFeeInput() {
   const isFree = document.getElementById('prod-is-free-ship').value === 'true';
@@ -512,7 +511,7 @@ export function updateProductProfitPreview() {
   const price = Number(document.getElementById('prod-price').value || 0);
   const cost = Number(document.getElementById('prod-cost-price')?.value || 0);
   const comm = price * COMMISSION_RATE;
-  const netTubo = price - cost - comm;
+  const netProfit = price - cost - comm;
 
   document.getElementById('prev-sell-price').textContent = formatPeso(price);
   if (document.getElementById('prev-cost-price')) {
@@ -520,8 +519,8 @@ export function updateProductProfitPreview() {
   }
   document.getElementById('prev-comm-fee').textContent = formatPeso(comm);
   const netEl = document.getElementById('prev-net-unit');
-  netEl.textContent = formatPeso(netTubo);
-  netEl.style.color = netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)';
+  netEl.textContent = formatPeso(netProfit);
+  netEl.style.color = netProfit >= 0 ? 'var(--primary-dark)' : 'var(--danger)';
 }
 
 export function triggerSlotFile(slotIdx) {
@@ -609,8 +608,8 @@ export async function saveProduct(e) {
     }
     resetProductForm();
     await loadMarketplaceData();
-    renderSellerProductsTable();
-    renderSellerIncomeAnalytics();
+    await loadSellerDashboard();
+    switchSellerTab('my-products');
   } catch (err) {
     showToast(err.message || 'Failed to save product', 'error');
   } finally {
@@ -621,6 +620,9 @@ export async function saveProduct(e) {
 export function editSellerProduct(productId) {
   const prod = state.allProducts.find(p => String(p.id) === String(productId));
   if (!prod) return;
+
+  switchSellerTab('products');
+
   document.getElementById('edit-product-id').value = prod.id;
   document.getElementById('prod-title').value = prod.title || '';
   document.getElementById('prod-category').value = prod.category || CATEGORIES[1];
@@ -636,8 +638,10 @@ export function editSellerProduct(productId) {
 
   document.getElementById('prod-desc').value = prod.description || '';
 
-  const imgs = getProductImages(prod);
-  state.productPhotoSlots = [imgs[0] || null, imgs[1] || null];
+  const rawImgs = [];
+  if (prod.image_url) rawImgs.push(prod.image_url);
+  if (Array.isArray(prod.extra_images)) rawImgs.push(...prod.extra_images);
+  state.productPhotoSlots = [rawImgs[0] || null, rawImgs[1] || null];
   refreshPhotoSlotsUI();
   updateProductProfitPreview();
 
@@ -704,12 +708,29 @@ export async function toggleProductFreeShipping(productId) {
 }
 
 export async function deleteSellerProduct(productId) {
-  if (!confirm('Delete this product listing?')) return;
-  const { error } = await supabaseClient.from('products').delete().eq('id', productId);
-  if (error) return showToast(error.message, 'error');
-  showToast('Product deleted.');
-  await loadMarketplaceData();
-  renderSellerProductsTable();
+  const prod = state.allProducts.find(p => String(p.id) === String(productId));
+  const title = prod?.title || 'this product';
+  if (!confirm(`Permanently delete "${title}" from your store and database?`)) return;
+
+  try {
+    const urlsToRemove = [prod?.image_url, ...(Array.isArray(prod?.extra_images) ? prod.extra_images : [])].filter(Boolean);
+
+    const { error } = await supabaseClient
+      .from('products')
+      .delete()
+      .eq('id', productId)
+      .eq('seller_id', state.currentUser.id);
+
+    if (error) throw error;
+
+    await deleteImagesFromBucket(urlsToRemove);
+
+    showToast('Product permanently deleted from database!');
+    await loadMarketplaceData();
+    await loadSellerDashboard();
+  } catch (err) {
+    showToast(err.message || 'Failed to delete product.', 'error');
+  }
 }
 
 export function renderSellerProductsTable() {
@@ -717,6 +738,7 @@ export function renderSellerProductsTable() {
   if (!tbody) return;
 
   const shipFilter = document.getElementById('seller-prod-ship-filter')?.value || 'all';
+  const searchTerm = (document.getElementById('seller-prod-search')?.value || '').trim().toLowerCase();
   let myProds = state.allProducts.filter(p => p.seller_id === state.currentUser?.id);
 
   if (shipFilter === 'free') {
@@ -725,10 +747,15 @@ export function renderSellerProductsTable() {
     myProds = myProds.filter(p => p.is_free_shipping !== true && Number(p.shipping_fee || 0) > 0);
   }
 
-  document.getElementById('seller-products-count').textContent = `${myProds.length} Item${myProds.length === 1 ? '' : 's'}`;
+  if (searchTerm) {
+    myProds = myProds.filter(p => `${p.title || ''} ${p.category || ''}`.toLowerCase().includes(searchTerm));
+  }
+
+  const countBadge = document.getElementById('seller-products-count');
+  if (countBadge) countBadge.textContent = `${myProds.length} Item${myProds.length === 1 ? '' : 's'}`;
 
   if (!myProds.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);">No products found for this filter. Use the form below to post an item!</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:1.5rem;">No products found. Click <strong>"➕ Add New Product"</strong> to publish your first item!</td></tr>`;
     return;
   }
 
@@ -736,20 +763,20 @@ export function renderSellerProductsTable() {
     const price = Number(p.price || 0);
     const cost = Number(p.cost_price || 0);
     const comm = price * COMMISSION_RATE;
-    const netTubo = price - cost - comm;
+    const netProfit = price - cost - comm;
     const isFree = p.is_free_shipping === true || Number(p.shipping_fee || 0) === 0;
     const stockVal = Number(p.stock ?? 0);
 
     return `
       <tr>
-        <td><img src="${escapeHtml(getProductImages(p)[0])}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" /></td>
+        <td><img src="${escapeHtml(getProductImages(p)[0])}" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" /></td>
         <td>
           <strong>${escapeHtml(p.title)}</strong>
           <div style="font-size:0.72rem;color:var(--muted);">${escapeHtml(p.category || '')}</div>
         </td>
         <td style="color:#475569;">${formatPeso(cost)}</td>
         <td><strong>${formatPeso(price)}</strong></td>
-        <td style="color:${netTubo >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(netTubo)}</td>
+        <td style="color:${netProfit >= 0 ? 'var(--primary-dark)' : 'var(--danger)'};font-weight:700;">${formatPeso(netProfit)}</td>
         <td>
           <button type="button" class="sm ${isFree ? 'success-btn' : 'secondary'}" onclick="toggleProductFreeShipping('${escapeHtml(p.id)}')" title="Click to switch between Free Shipping and With Shipping Fee">
             ${isFree ? '🚚 Free Shipping' : `📦 With Fee (${formatPeso(p.shipping_fee)})`}
@@ -764,8 +791,8 @@ export function renderSellerProductsTable() {
         </td>
         <td>
           <div style="display:flex;gap:0.35rem;">
-            <button class="secondary sm" onclick="editSellerProduct('${escapeHtml(p.id)}')">Edit</button>
-            <button class="danger-outline sm" onclick="deleteSellerProduct('${escapeHtml(p.id)}')">Delete</button>
+            <button class="secondary sm" onclick="editSellerProduct('${escapeHtml(p.id)}')">✏️ Edit</button>
+            <button class="danger-outline sm" onclick="deleteSellerProduct('${escapeHtml(p.id)}')">🗑️ Delete</button>
           </div>
         </td>
       </tr>
@@ -864,6 +891,7 @@ export async function saveSellerShippingAndQr(e) {
   await loadUserSession();
   await loadSellerDashboard();
 }
+
 Object.assign(window, {
   openSellerApplyModal,
   closeSellerApplyModal,
@@ -895,4 +923,3 @@ Object.assign(window, {
   clearSellerQrImage,
   saveSellerShippingAndQr
 });
-
