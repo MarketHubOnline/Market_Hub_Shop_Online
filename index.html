@@ -405,13 +405,13 @@
     </section>
 
     <!-- =========================================================
-         VIEW 2: SELLER CENTRE (UPDATED WITH CAPITAL/PROFIT, PRODUCT RATE, STOCK & FREE SHIP CONTROLS)
+         VIEW 2: SELLER CENTRE (5 TABS: HOME, MY PRODUCTS, POST PRODUCT, INCOME, SHIPPING)
          ========================================================= -->
     <section id="view-seller" class="hidden">
       <div class="row-between" style="margin-bottom:0.85rem;">
         <div>
           <h2 style="margin:0;color:var(--primary-deep);">🏪 Seller Centre</h2>
-          <p id="seller-shop-subtitle" style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Manage your store orders, puhunan vs. tubo analytics, product posts, stocks, and shipping.</p>
+          <p id="seller-shop-subtitle" style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Manage your store orders, live product catalog, profit analytics, and delivery settings.</p>
         </div>
         <button class="secondary sm" onclick="switchView('marketplace')">← Back to Marketplace</button>
       </div>
@@ -420,11 +420,14 @@
         <button id="seller-nav-home" class="seller-menu-btn active" onclick="switchSellerTab('home')">
           🏠 My Home
         </button>
+        <button id="seller-nav-my-products" class="seller-menu-btn" onclick="switchSellerTab('my-products')">
+          📦 My Products
+        </button>
         <button id="seller-nav-products" class="seller-menu-btn" onclick="switchSellerTab('products')">
-          📦 Product Post &amp; Inventory
+          ➕ Post / Edit Product
         </button>
         <button id="seller-nav-income" class="seller-menu-btn" onclick="switchSellerTab('income')">
-          📊 Income &amp; Tubo Monitoring
+          📊 Income &amp; Profit
         </button>
         <button id="seller-nav-shipping" class="seller-menu-btn" onclick="switchSellerTab('shipping')">
           🚚 Shipping Settings
@@ -475,22 +478,23 @@
         </div>
       </div>
 
-      <!-- TAB 2: PRODUCT POST & INVENTORY MANAGEMENT -->
-      <div id="seller-tab-products" class="hidden">
-        <!-- MY PUBLISHED PRODUCTS LIST (TOP FOR QUICK STOCK & FREE SHIPPING MANAGEMENT) -->
+      <!-- TAB 2: MY PRODUCTS (LIVE STOREFRONT CATALOG WITH INSTANT EDIT & DELETE) -->
+      <div id="seller-tab-my-products" class="hidden">
         <div class="panel">
-          <div class="row-between" style="margin-bottom:0.75rem;">
+          <div class="row-between" style="margin-bottom:0.85rem;gap:0.65rem;">
             <div>
-              <h3 style="margin:0;">📦 My Posted Products, Stocks &amp; Shipping Toggle</h3>
-              <p style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--muted);">I-edit ang produkto, magdagdag ng stocks (+/-), o itakda kung alin ang <strong>Free Shipping</strong> at alin ang <strong>May Shipping Fee</strong>.</p>
+              <h3 style="margin:0;">📦 My Published Products</h3>
+              <p style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--muted);">All items currently displayed on the web. Edit listings, adjust stock (+/-), toggle shipping, or permanently delete from your database.</p>
             </div>
             <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-              <select id="seller-prod-ship-filter" style="width:auto;font-size:0.78rem;padding:0.35rem 0.6rem;" onchange="renderSellerProductsTable()">
+              <input type="text" id="seller-prod-search" placeholder="Search my products..." style="width:190px;font-size:0.8rem;padding:0.36rem 0.6rem;" oninput="renderSellerProductsTable()" />
+              <select id="seller-prod-ship-filter" style="width:auto;font-size:0.78rem;padding:0.36rem 0.6rem;" onchange="renderSellerProductsTable()">
                 <option value="all">All Shipping Types</option>
                 <option value="free">🚚 Free Shipping Items</option>
                 <option value="paid">📦 With Shipping Fee Items</option>
               </select>
               <span id="seller-products-count" class="badge seller">0 Items</span>
+              <button type="button" class="shop-cta sm" onclick="resetProductForm(); switchSellerTab('products');">➕ Add New Product</button>
             </div>
           </div>
 
@@ -500,9 +504,9 @@
                 <tr>
                   <th>Photo</th>
                   <th>Product Name</th>
-                  <th>Puhunan</th>
+                  <th>Capital Cost</th>
                   <th>Selling Price</th>
-                  <th>Net Tubo / Unit</th>
+                  <th>Net Profit / Unit</th>
                   <th>Shipping Option</th>
                   <th>Stocks (Quick +/-)</th>
                   <th>Actions</th>
@@ -512,15 +516,20 @@
             </table>
           </div>
         </div>
+      </div>
 
-        <!-- ADD / EDIT PRODUCT FORM -->
+      <!-- TAB 3: POST / EDIT PRODUCT FORM -->
+      <div id="seller-tab-products" class="hidden">
         <div class="panel" id="seller-product-form-panel">
           <div class="row-between" style="margin-bottom:0.85rem;">
             <div>
               <h3 id="product-form-heading" style="margin:0;">➕ Post New Product</h3>
-              <p style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--muted);">Ilagay ang Puhunan (Capital) at Selling Price para makita agad ang malinis mong tubo pagkatapos ng 10% Admin Fee.</p>
+              <p style="margin:0.15rem 0 0;font-size:0.8rem;color:var(--muted);">Enter your Capital Cost and Selling Price to preview your net profit after the 10% Admin Fee.</p>
             </div>
-            <button id="cancel-edit-btn" class="secondary sm hidden" onclick="resetProductForm()">Cancel Edit</button>
+            <div style="display:flex;gap:0.45rem;">
+              <button type="button" class="secondary sm" onclick="switchSellerTab('my-products')">📦 View My Products</button>
+              <button id="cancel-edit-btn" class="secondary sm hidden" onclick="resetProductForm()">Cancel Edit</button>
+            </div>
           </div>
 
           <form id="product-form" onsubmit="saveProduct(event)">
@@ -535,7 +544,7 @@
                 <select id="prod-category" required></select>
               </div>
               <div>
-                <label class="field-label">Puhunan / Capital per Unit (₱) *</label>
+                <label class="field-label">Capital Cost per Unit (₱) *</label>
                 <input type="number" id="prod-cost-price" step="0.01" min="0" value="0" required placeholder="0.00" oninput="updateProductProfitPreview()" />
               </div>
               <div>
@@ -565,12 +574,12 @@
 
             <div class="profit-preview-pill">
               <span>
-                💡 <strong>Tubo Calculator:</strong>
+                💡 <strong>Profit Calculator:</strong>
                 Price <strong id="prev-sell-price">₱0.00</strong>
-                − Puhunan (<strong id="prev-cost-price">₱0.00</strong>)
+                − Capital Cost (<strong id="prev-cost-price">₱0.00</strong>)
                 − 10% Admin Fee (<strong id="prev-comm-fee">₱0.00</strong>)
               </span>
-              <span>Malinis na Tubo / Unit: <strong id="prev-net-unit" style="font-size:0.95rem;color:var(--primary-dark);">₱0.00</strong></span>
+              <span>Net Profit / Unit: <strong id="prev-net-unit" style="font-size:0.95rem;color:var(--primary-dark);">₱0.00</strong></span>
             </div>
 
             <div style="margin-top:0.85rem;">
@@ -579,7 +588,7 @@
             </div>
 
             <div style="margin-top:0.85rem;">
-              <label class="field-label">Product Photos (Max 2 Images — Auto-compressed)</label>
+              <label class="field-label">Product Photos (Max 2 Images — Auto-compressed &amp; Saved to Bucket Storage)</label>
               <div class="photo-slots-grid">
                 <div class="photo-slot" onclick="triggerSlotFile(0)">
                   <input type="file" id="slot-file-0" accept="image/*" class="hidden" onchange="handleSlotFileChange(0, event)" />
@@ -610,21 +619,21 @@
         </div>
       </div>
 
-<!-- TAB 3: INCOME & TUBO MONITORING + DAILY TO MONTHLY PRODUCT SALES -->
+      <!-- TAB 4: INCOME & PROFIT MONITORING -->
       <div id="seller-tab-income" class="hidden">
         <div class="panel">
           <div class="row-between" style="margin-bottom:0.85rem;flex-wrap:wrap;gap:0.65rem;">
             <div>
-              <h3 style="margin:0;">📊 Income Monitoring: Puhunan, Tubo &amp; Rider Shipping</h3>
-              <p style="margin:0.2rem 0 0;font-size:0.8rem;color:var(--muted);">Hiwalay ang <strong>Shipping (For Rider)</strong>, bawas na ang <strong>10% Admin Fee</strong>, at kita agad ang kabuuang makukuha ng seller (Puhunan + Net Tubo).</p>
+              <h3 style="margin:0;">📊 Income Monitoring: Capital, Net Profit &amp; Rider Shipping</h3>
+              <p style="margin:0.2rem 0 0;font-size:0.8rem;color:var(--muted);"><strong>Rider Shipping Fee</strong> is separated, the <strong>10% Admin Fee</strong> is deducted, and your total seller payout (Capital Cost + Net Profit) is calculated automatically.</p>
             </div>
             <div style="display:flex;gap:0.45rem;align-items:center;flex-wrap:wrap;">
               <select id="income-period-filter" style="width:auto;font-size:0.8rem;padding:0.38rem 0.65rem;font-weight:600;" onchange="handleIncomePeriodChange()">
-                <option value="all">📅 All Time (Lahat ng Benta)</option>
-                <option value="today">☀️ Daily: Ngayong Araw (Today)</option>
+                <option value="all">📅 All Time Sales</option>
+                <option value="today">☀️ Daily: Today</option>
                 <option value="7days">📆 Weekly: Last 7 Days</option>
-                <option value="month">🗓️ Monthly: Ngayong Buwan</option>
-                <option value="custom">🔍 Pumili ng Petsa / Buwan</option>
+                <option value="month">🗓️ Monthly: This Month</option>
+                <option value="custom">🔍 Custom Date / Month</option>
               </select>
               <input type="date" id="income-custom-date" class="hidden" style="width:auto;font-size:0.8rem;padding:0.34rem 0.55rem;" onchange="renderSellerIncomeAnalytics()" />
               <input type="month" id="income-custom-month" class="hidden" style="width:auto;font-size:0.8rem;padding:0.34rem 0.55rem;" onchange="renderSellerIncomeAnalytics()" />
@@ -635,29 +644,29 @@
           <!-- TOP KPI CARDS -->
           <div class="kpi-grid">
             <div class="kpi-card highlight">
-              <div class="kpi-label">💰 Kabuuang Makukuha ng Seller</div>
+              <div class="kpi-label">💰 Total Seller Payout</div>
               <div class="kpi-value" id="inc-kpi-seller-payout">₱0.00</div>
-              <div class="kpi-sub">Puhunan + Net Tubo (Less 10% Admin Fee)</div>
+              <div class="kpi-sub">Capital + Net Profit (Less 10% Admin Fee)</div>
             </div>
             <div class="kpi-card">
-              <div class="kpi-label">📦 Total Puhunan (Capital)</div>
+              <div class="kpi-label">📦 Total Capital Cost</div>
               <div class="kpi-value" id="inc-kpi-capital" style="color:#475569;">₱0.00</div>
-              <div class="kpi-sub">Babalik na kapital sa paninda</div>
+              <div class="kpi-sub">Recovered product capital</div>
             </div>
             <div class="kpi-card highlight">
-              <div class="kpi-label">📈 Net Tubo (Clean Profit)</div>
+              <div class="kpi-label">📈 Net Profit (Clean Earnings)</div>
               <div class="kpi-value" id="inc-kpi-net-tubo">₱0.00</div>
-              <div class="kpi-sub">Product Sales − Puhunan − 10% Fee</div>
+              <div class="kpi-sub">Product Sales − Capital − 10% Fee</div>
             </div>
             <div class="kpi-card amber-highlight">
               <div class="kpi-label">🏛️ Less: Admin Fee (10%)</div>
               <div class="kpi-value" id="inc-kpi-commission">-₱0.00</div>
-              <div class="kpi-sub">Bawas sa product sales</div>
+              <div class="kpi-sub">Deducted from product sales</div>
             </div>
             <div class="kpi-card" style="border-left:4px solid #0284c7;">
               <div class="kpi-label">🛵 Shipping Fee (For Rider)</div>
               <div class="kpi-value" id="inc-kpi-shipping" style="color:#0284c7;">₱0.00</div>
-              <div class="kpi-sub">Bukod para sa delivery rider</div>
+              <div class="kpi-sub">Allocated separately for rider</div>
             </div>
           </div>
 
@@ -670,7 +679,7 @@
             <div class="deduction-ledger">
               <h4 style="margin:0 0 0.65rem;color:var(--primary-deep);">📑 Seller Payout &amp; Rider Shipping Statement</h4>
               <div class="deduction-row">
-                <span><span class="legend-dot" style="background:#16a34a;"></span>Gross Product Sales (Benta ng Paninda)</span>
+                <span><span class="legend-dot" style="background:#16a34a;"></span>Gross Product Sales</span>
                 <strong id="ledger-product-sales">₱0.00</strong>
               </div>
               <div class="deduction-row" style="color:var(--danger);">
@@ -678,29 +687,29 @@
                 <strong id="ledger-commission-deduct">-₱0.00</strong>
               </div>
               <div class="deduction-row" style="background:#f0fdf4;padding:0.45rem 0.5rem;border-radius:6px;margin:0.25rem 0;">
-                <span><strong>💵 KABUUANG MAKUKUHA NG SELLER (Puhunan + Tubo):</strong></span>
+                <span><strong>💵 TOTAL SELLER PAYOUT (Capital + Net Profit):</strong></span>
                 <strong id="ledger-seller-payout" style="color:var(--primary-deep);font-size:0.98rem;">₱0.00</strong>
               </div>
               <div class="deduction-row" style="color:#475569;padding-left:0.75rem;font-size:0.82rem;">
-                <span>↳ Babalik na Puhunan (Capital):</span>
+                <span>↳ Recovered Capital Cost:</span>
                 <strong id="ledger-capital-cost">₱0.00</strong>
               </div>
               <div class="deduction-row total-profit-row" style="padding-left:0.75rem;">
-                <span>↳ Malinis na Net Tubo (Profit):</span>
+                <span>↳ Clean Net Profit:</span>
                 <span id="ledger-net-tubo">₱0.00</span>
               </div>
 
               <div class="deduction-row" style="margin-top:0.65rem;padding-top:0.55rem;border-top:1px dashed var(--border);color:#0284c7;">
-                <span><span class="legend-dot" style="background:#0ea5e9;"></span>🛵 Bukod: Shipping Fee (Para sa Rider)</span>
+                <span><span class="legend-dot" style="background:#0ea5e9;"></span>🛵 Separate: Shipping Fee (For Rider)</span>
                 <strong id="ledger-shipping-sales">₱0.00</strong>
               </div>
               <div class="deduction-row" style="font-size:0.8rem;color:var(--muted);">
-                <span>Total Bayad ng Buyers (Products + Rider Shipping):</span>
+                <span>Total Paid by Buyers (Products + Rider Shipping):</span>
                 <strong id="ledger-gross-total">₱0.00</strong>
               </div>
               <div style="margin-top:0.65rem;font-size:0.76rem;color:var(--muted);">
-                • Delivered Payout (Makukuha na): <strong id="ledger-delivered-payout" style="color:var(--primary-dark);">₱0.00</strong> (Tubo: <strong id="ledger-delivered-net" style="color:var(--primary-dark);">₱0.00</strong>)<br/>
-                • Pending / In-Transit Payout: <strong id="ledger-pending-payout" style="color:#b45309;">₱0.00</strong> (Tubo: <strong id="ledger-pending-net" style="color:#b45309;">₱0.00</strong>)
+                • Delivered Payout (Available): <strong id="ledger-delivered-payout" style="color:var(--primary-dark);">₱0.00</strong> (Profit: <strong id="ledger-delivered-net" style="color:var(--primary-dark);">₱0.00</strong>)<br/>
+                • Pending / In-Transit Payout: <strong id="ledger-pending-payout" style="color:#b45309;">₱0.00</strong> (Profit: <strong id="ledger-pending-net" style="color:#b45309;">₱0.00</strong>)
               </div>
             </div>
           </div>
@@ -709,8 +718,8 @@
           <div style="margin-top:1.35rem;">
             <div class="row-between" style="margin-bottom:0.45rem;flex-wrap:wrap;gap:0.5rem;">
               <div>
-                <h4 style="margin:0;color:var(--primary-deep);">📅 Daily &amp; Monthly Sales Monitoring (Benta Bawat Araw / Buwan)</h4>
-                <p style="margin:0.15rem 0 0;font-size:0.78rem;color:var(--muted);">Subaybayan ang araw-araw at buwanang benta, pinakamalakas na produkto sa araw na iyon, at rider shipping.</p>
+                <h4 style="margin:0;color:var(--primary-deep);">📅 Daily &amp; Monthly Sales Monitoring</h4>
+                <p style="margin:0.15rem 0 0;font-size:0.78rem;color:var(--muted);">Track daily and monthly sales totals, top-selling item per period, and separate rider shipping.</p>
               </div>
               <div style="display:flex;gap:0.35rem;">
                 <button type="button" id="btn-group-daily" class="shop-cta sm" onclick="setIncomeGroupMode('daily')">Daily View</button>
@@ -721,14 +730,14 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Petsa / Buwan</th>
+                    <th>Date / Month</th>
                     <th>Orders</th>
-                    <th>Pinakamalakas Bumenta (Top Product)</th>
-                    <th>Puhunan</th>
-                    <th>Net Tubo</th>
+                    <th>Top-Selling Product</th>
+                    <th>Capital Cost</th>
+                    <th>Net Profit</th>
                     <th>Admin Fee (10%)</th>
-                    <th>Makukuha ng Seller</th>
-                    <th>Rider Shipping (Bukod)</th>
+                    <th>Seller Payout</th>
+                    <th>Rider Shipping</th>
                   </tr>
                 </thead>
                 <tbody id="seller-period-summary-tbody"></tbody>
@@ -740,8 +749,8 @@
           <div style="margin-top:1.35rem;">
             <div class="row-between" style="margin-bottom:0.45rem;">
               <div>
-                <h4 style="margin:0;color:var(--primary-deep);">🏆 Malakas Bumenta &amp; Top Earning Products (Filtered by Period)</h4>
-                <p style="margin:0.15rem 0 0;font-size:0.78rem;color:var(--muted);">Naka-rank mula sa pinakamaraming nabenta at pinakamalaking <strong>Net Tubo</strong> sa napiling araw o buwan.</p>
+                <h4 style="margin:0;color:var(--primary-deep);">🏆 Best-Selling &amp; Top Earning Products (Filtered by Period)</h4>
+                <p style="margin:0.15rem 0 0;font-size:0.78rem;color:var(--muted);">Ranked by highest units sold and highest <strong>Net Profit</strong> within the selected date or month.</p>
               </div>
             </div>
             <div style="overflow-x:auto;">
@@ -753,10 +762,10 @@
                     <th>Buyer Rating</th>
                     <th>Units Sold</th>
                     <th>Product Sales</th>
-                    <th>Puhunan</th>
+                    <th>Capital Cost</th>
                     <th>Admin Fee (10%)</th>
-                    <th>Net Tubo</th>
-                    <th>Makukuha ng Seller</th>
+                    <th>Net Profit</th>
+                    <th>Seller Payout</th>
                   </tr>
                 </thead>
                 <tbody id="seller-product-rate-tbody"></tbody>
@@ -774,10 +783,10 @@
                   <th>Date</th>
                   <th>Status</th>
                   <th>Product Sales</th>
-                  <th>Puhunan</th>
+                  <th>Capital Cost</th>
                   <th>Admin Fee (10%)</th>
-                  <th>Net Tubo</th>
-                  <th>Makukuha ng Seller</th>
+                  <th>Net Profit</th>
+                  <th>Seller Payout</th>
                   <th>Rider Shipping</th>
                 </tr>
               </thead>
@@ -787,7 +796,7 @@
         </div>
       </div>
 
-      <!-- TAB 4: SHIPPING & QR PAYMENT SETTINGS -->
+      <!-- TAB 5: SHIPPING & QR PAYMENT SETTINGS -->
       <div id="seller-tab-shipping" class="hidden">
         <div class="panel">
           <h3 style="margin:0 0 0.25rem;">🚚 Barangay / Municipality Delivery Rates &amp; Shop QR Payment</h3>
@@ -1173,7 +1182,6 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Modular ES6 Entry Point -->
-  <!-- Auto-clear old Service Worker cache & load latest module -->
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(regs => {
@@ -1185,6 +1193,5 @@
     }
   </script>
   <script type="module" src="js/chat.js?v=20261126"></script>
-</body>
 </body>
 </html>
