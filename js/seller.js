@@ -35,7 +35,6 @@ export async function submitSellerApplication(e) {
   showToast('Seller application submitted! Awaiting admin approval.');
   await loadUserSession();
 }
-
 export function switchSellerTab(tab) {
   ['home', 'income', 'products', 'shipping'].forEach(t => {
     document.getElementById(`seller-tab-${t}`)?.classList.toggle('hidden', t !== tab);
