@@ -576,9 +576,10 @@ export async function saveProduct(e) {
   const isFreeShip = document.getElementById('prod-is-free-ship').value === 'true';
   const shipFeeVal = isFreeShip ? 0 : Number(document.getElementById('prod-shipping-fee').value || 0);
 
-  const payload = {
-    seller_id: state.currentUser.id,
-    shop_name: state.currentSellerRecord?.shop_name || state.currentProfile?.full_name || 'Seller Shop',
+shop_name:
+      state.currentSellerRecord?.shop_name ||
+      document.getElementById('ship-shop-name')?.value.trim() ||
+      'Verified Shop',
     title: document.getElementById('prod-title').value.trim(),
     category: document.getElementById('prod-category').value,
     cost_price: Number(document.getElementById('prod-cost-price').value || 0),
