@@ -85,6 +85,9 @@ export async function handleAuthSubmit(e) {
 export async function signOut() {
   if (supabaseClient) {
     await supabaseClient.auth.signOut({ scope: 'local' }).catch(() => {});
+    state.cart = [];
+localStorage.removeItem('markethub_cart');
+updateCartBadge();
   }
   state.currentUser = null;
   state.currentProfile = null;
