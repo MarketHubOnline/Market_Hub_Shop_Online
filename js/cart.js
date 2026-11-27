@@ -8,11 +8,26 @@ import { renderCheckoutQrSellers } from './checkout.js';
 let cartActiveVouchers = [];
 let appliedVoucherObj = null;
 
-export function saveCartToStorage() {
-  localStorage.setItem('markethub_cart', JSON.stringify(state.cart));
+function getCartStorageKey() {
+  return state.currentUser?.id
+    ? `markethub_cart_${state.currentUser.id}`
+    : 'markethub_cart_guest';
+}
+
+export function loadCartForCurrentUser() {
+  try {
+    const raw = localStorage.getItem(getCartStorageKey());
+    state.cart = raw ? JSON.parse(raw) : [];
+  } catch {
+    state.cart = [];
+  }
   updateCartBadge();
 }
 
+export function saveCartToStorage() {
+  localStorage.setItem(getCartStorageKey(), JSON.stringify(state.cart));
+  updateCartBadge();
+}
 export function updateCartBadge() {
   const totalQty = state.cart.reduce((sum, item) => sum + Number(item.qty || 1), 0);
   const badge = document.getElementById('cart-count');
