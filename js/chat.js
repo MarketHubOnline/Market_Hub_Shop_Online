@@ -75,6 +75,27 @@ export async function markAllNotificationsRead() {
   await loadNotifications();
 }
 
+export async function clearAllNotifications() {
+  if (!supabaseClient || !state.currentUser) return;
+  if (!state.notifications.length) {
+    return showToast('Notification history is already empty.', 'warning');
+  }
+  if (!confirm('Clear all your notification history permanently from the database?')) return;
+
+  const { error } = await supabaseClient
+    .from('notifications')
+    .delete()
+    .eq('user_id', state.currentUser.id);
+
+  if (error) {
+    return showToast(error.message || 'Failed to clear notifications.', 'error');
+  }
+
+  state.notifications = [];
+  renderNotifications();
+  showToast('Notification history cleared!');
+}
+
 export async function loadChatMessages() {
   if (!supabaseClient || !state.currentUser) return;
   const { data } = await supabaseClient
@@ -195,6 +216,7 @@ Object.assign(window, {
   toggleNotifDropdown,
   markNotificationRead,
   markAllNotificationsRead,
+  clearAllNotifications,
   openChatHub,
   openDirectChat,
   closeChatModal,
