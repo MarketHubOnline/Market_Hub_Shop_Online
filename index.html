@@ -52,7 +52,10 @@
             <div id="notif-dropdown" class="notif-dropdown hidden" onclick="event.stopPropagation()">
               <div class="notif-header">
                 <h4>Notifications</h4>
-                <button class="secondary sm" onclick="markAllNotificationsRead()">Mark all read</button>
+                <div style="display:flex;gap:0.35rem;align-items:center;">
+                  <button class="secondary sm" onclick="markAllNotificationsRead()">Mark read</button>
+                  <button class="danger-outline sm" onclick="clearAllNotifications()" title="Delete all notification history">Clear</button>
+                </div>
               </div>
               <div id="notif-list" class="notif-list">
                 <div style="padding:1rem;text-align:center;color:var(--muted);font-size:0.82rem;">No notifications yet.</div>
