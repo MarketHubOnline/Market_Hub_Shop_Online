@@ -63,13 +63,21 @@
             </div>
           </div>
 
-          <span id="user-pill" class="user-pill hidden" onclick="switchView('orders', 'profile')" title="Edit My Profile & Account">
-            <span class="user-avatar-dot" id="user-avatar-initial" style="overflow:hidden;">U</span>
-            <span id="user-display-name">User</span>
-          </span>
+          <!-- Shopee-style User Pill + Hover Dropdown -->
+          <div id="user-pill" class="user-menu-dropdown hidden">
+            <div class="user-pill" onclick="switchView('orders', 'profile')" title="Go to My Profile">
+              <span class="user-avatar-dot" id="user-avatar-initial" style="overflow:hidden;">U</span>
+              <span id="user-display-name">User</span>
+            </div>
+            <div class="user-dropdown-menu">
+              <button type="button" onclick="switchView('orders', 'profile')">👤 My Account</button>
+              <button type="button" onclick="switchView('orders', 'purchases')">🛍️ My Order</button>
+              <button type="button" class="logout-item" onclick="signOut()">🚪 Log out</button>
+            </div>
+          </div>
+
           <span id="role-badge" class="badge hidden">guest</span>
           <button id="auth-btn" class="top-link-btn" style="font-weight:700;" onclick="openAuthModal('signin')">Sign Up / Login</button>
-          <button id="logout-btn" class="top-link-btn hidden" onclick="signOut()">Logout</button>
         </div>
       </div>
 
@@ -1038,6 +1046,8 @@
             <button type="button" id="acct-nav-password" class="sidebar-cat-item" onclick="openAccountTab('password')">🔒 Change Password</button>
             <button type="button" id="acct-nav-purchases" class="sidebar-cat-item active" onclick="openAccountTab('purchases')">🛍️ My Purchases</button>
             <button type="button" id="acct-nav-vouchers" class="sidebar-cat-item" onclick="openAccountTab('vouchers')">🎟️ My Vouchers</button>
+            <hr style="border:none;border-top:1px solid var(--border);margin:0.45rem 0;" />
+            <button type="button" class="sidebar-cat-item" style="color:var(--danger);font-weight:600;" onclick="signOut()">🚪 Log out</button>
           </div>
         </aside>
 
