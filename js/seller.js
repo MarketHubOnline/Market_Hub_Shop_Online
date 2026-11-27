@@ -576,7 +576,9 @@ export async function saveProduct(e) {
   const isFreeShip = document.getElementById('prod-is-free-ship').value === 'true';
   const shipFeeVal = isFreeShip ? 0 : Number(document.getElementById('prod-shipping-fee').value || 0);
 
-shop_name:
+  const payload = {
+    seller_id: state.currentUser.id,
+    shop_name:
       state.currentSellerRecord?.shop_name ||
       document.getElementById('ship-shop-name')?.value.trim() ||
       'Verified Shop',
