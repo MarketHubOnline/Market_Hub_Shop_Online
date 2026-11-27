@@ -84,7 +84,11 @@ export function openExpandedProduct(productId) {
   document.getElementById('pdp-spec-stock').textContent = `${stockNum} available`;
   document.getElementById('pdp-spec-area').textContent = prod.delivery_area || seller?.location || 'All Areas';
   document.getElementById('pdp-spec-shipping').textContent = isFree ? 'Free Delivery' : formatPeso(shipFee);
-  document.getElementById('pdp-description').textContent = prod.description || 'Fresh quality item from a verified MarketHub seller.';
+
+  const descEl = document.getElementById('pdp-description');
+  descEl.style.whiteSpace = 'pre-line';
+  descEl.style.wordBreak = 'break-word';
+  descEl.textContent = prod.description || 'Fresh quality item from a verified MarketHub seller.';
 
   const otherShopItems = shopProducts.filter(p => String(p.id) !== String(prod.id)).slice(0, 4);
   const topPicksEl = document.getElementById('pdp-top-picks-list');
@@ -195,7 +199,7 @@ export function renderPdpReviews() {
         <span style="font-size:0.74rem;color:var(--muted);">${new Date(r.created_at).toLocaleDateString()}</span>
       </div>
       <div style="color:#f59e0b;font-size:0.85rem;margin:0.15rem 0;">${'★'.repeat(Number(r.rating || 5))}${'☆'.repeat(5 - Number(r.rating || 5))}</div>
-      <div style="font-size:0.84rem;color:var(--text-secondary);">${escapeHtml(r.comment || 'Great item!')}</div>
+      <div style="font-size:0.84rem;color:var(--text-secondary);white-space:pre-line;">${escapeHtml(r.comment || 'Great item!')}</div>
     </div>
   `).join('');
 }
