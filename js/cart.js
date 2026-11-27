@@ -26,9 +26,11 @@ export function addToCartById(productId, qty = 1) {
   if (stock <= 0) return showToast('This item is out of stock.', 'error');
 
   const isFreeShip = prod.is_free_shipping === true;
+  const liveShopName = state.allSellers.find(s => s.user_id === prod.seller_id)?.shop_name || prod.shop_name || 'Verified Shop';
   const existing = state.cart.find(c => String(c.product_id) === String(productId));
   if (existing) {
     existing.qty = Math.min(stock, existing.qty + qty);
+    existing.shop_name = liveShopName;
     existing.cost_price = Number(prod.cost_price || 0);
     existing.is_free_shipping = isFreeShip;
     existing.shipping_fee = isFreeShip ? 0 : Number(prod.shipping_fee || 0);
@@ -36,7 +38,7 @@ export function addToCartById(productId, qty = 1) {
     state.cart.push({
       product_id: prod.id,
       seller_id: prod.seller_id,
-      shop_name: prod.shop_name || state.allSellers.find(s => s.user_id === prod.seller_id)?.shop_name || 'Verified Shop',
+      shop_name: liveShopName,
       title: prod.title,
       price: Number(prod.price),
       cost_price: Number(prod.cost_price || 0),
@@ -106,13 +108,14 @@ export function renderCartModal() {
 
   container.innerHTML = state.cart.map((item, idx) => {
     const isFree = item.is_free_shipping === true;
+    const displayShopName = state.allSellers.find(s => s.user_id === item.seller_id)?.shop_name || item.shop_name || 'Verified Shop';
     return `
       <div style="display:flex;align-items:center;gap:0.75rem;padding:0.65rem 0;border-bottom:1px solid var(--border);">
         <img src="${escapeHtml(item.image_url || PLACEHOLDER_IMG)}" alt="" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" />
         <div style="flex:1;min-width:0;">
           <div style="font-weight:700;font-size:0.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.title)}</div>
           <div style="font-size:0.74rem;color:var(--primary-dark);font-weight:600;">
-            🏪 ${escapeHtml(item.shop_name)}
+            🏪 ${escapeHtml(displayShopName)}
             ${isFree ? '<span class="badge ship-free" style="margin-left:0.35rem;font-size:0.65rem;">🚚 Free Shipping</span>' : ''}
           </div>
           <div style="font-size:0.82rem;font-weight:700;margin-top:0.15rem;">${formatPeso(item.price)} × ${item.qty}</div>
