@@ -228,8 +228,29 @@ export async function updateSellerOrderStatus(orderId, newStatus) {
 }
 
 // =========================================================
-// SELLER SHOP VOUCHER GENERATOR
+// SELLER SHOP VOUCHER GENERATOR (DISCOUNT & FREE SHIPPING)
 // =========================================================
+export function toggleVoucherValueInput() {
+  const type = document.getElementById('voucher-type-select')?.value;
+  const valInput = document.getElementById('voucher-value-input');
+  const label = document.getElementById('voucher-value-label');
+  if (!valInput || !label) return;
+
+  if (type === 'free_shipping') {
+    label.textContent = 'Max Shipping Cap (₱) — 0 = 100% Free Shipping';
+    valInput.value = 0;
+    valInput.placeholder = '0 = Full Free Shipping';
+  } else if (type === 'percent') {
+    label.textContent = 'Percentage Discount (% OFF) *';
+    valInput.value = '';
+    valInput.placeholder = 'e.g. 10';
+  } else {
+    label.textContent = 'Fixed Discount Amount (₱ OFF) *';
+    valInput.value = '';
+    valInput.placeholder = 'e.g. 50';
+  }
+}
+
 export function generateRandomVoucherCode() {
   const prefix = (state.currentSellerRecord?.shop_name || 'SHOP')
     .replace(/[^a-zA-Z0-9]/g, '')
@@ -257,18 +278,28 @@ export async function loadSellerVouchers() {
 
   const list = data || [];
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.25rem;">No shop vouchers created yet. Create one above to attract more buyers!</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.25rem;">No shop vouchers created yet. Create a Discount or Free Shipping voucher above!</td></tr>`;
     return;
   }
 
   tbody.innerHTML = list.map(v => {
-    const discLabel = v.discount_type === 'percent'
-      ? `${Number(v.discount_value)}% OFF`
-      : `${formatPeso(v.discount_value)} OFF`;
+    let discLabel = '';
+    let badgeClass = 'seller';
+    if (v.discount_type === 'free_shipping') {
+      badgeClass = 'ship-free';
+      discLabel = Number(v.discount_value || 0) > 0
+        ? `🚚 Free Ship (up to ${formatPeso(v.discount_value)})`
+        : '🚚 100% FREE SHIPPING';
+    } else if (v.discount_type === 'percent') {
+      discLabel = `${Number(v.discount_value)}% OFF`;
+    } else {
+      discLabel = `${formatPeso(v.discount_value)} OFF`;
+    }
+
     return `
       <tr>
         <td><strong style="color:var(--primary-deep);letter-spacing:0.04em;">${escapeHtml(v.code)}</strong></td>
-        <td><span class="badge seller">${discLabel}</span></td>
+        <td><span class="badge ${badgeClass}">${discLabel}</span></td>
         <td>${formatPeso(v.min_spend)}</td>
         <td><strong>${v.used_count || 0}</strong> / ${v.usage_limit}</td>
         <td>${v.expires_at ? new Date(v.expires_at).toLocaleDateString() : 'No Expiry'}</td>
@@ -296,8 +327,13 @@ export async function createSellerVoucher(e) {
   const usageLimit = parseInt(document.getElementById('voucher-usage-limit').value, 10) || 50;
   const expiryDate = document.getElementById('voucher-expiry-date').value;
 
-  if (!code || discountValue <= 0) return showToast('Enter a valid code and discount amount.', 'warning');
-  if (discountType === 'percent' && discountValue > 90) return showToast('Percentage discount cannot exceed 90%.', 'warning');
+  if (!code) return showToast('Enter a valid voucher code.', 'warning');
+  if (discountType !== 'free_shipping' && discountValue <= 0) {
+    return showToast('Enter a valid discount amount.', 'warning');
+  }
+  if (discountType === 'percent' && discountValue > 90) {
+    return showToast('Percentage discount cannot exceed 90%.', 'warning');
+  }
 
   const payload = {
     seller_id: state.currentUser.id,
@@ -315,6 +351,7 @@ export async function createSellerVoucher(e) {
   if (error) return showToast(error.message.includes('duplicate') ? 'Voucher code already exists. Generate another code.' : error.message, 'error');
 
   e.target.reset();
+  toggleVoucherValueInput();
   showToast(`Shop voucher "${code}" published!`);
   await loadSellerVouchers();
 }
@@ -893,7 +930,6 @@ export async function deleteSellerProduct(productId) {
 
     if (error) throw error;
 
-    // Delete uploaded images directly from markethub-images bucket
     const marker = '/object/public/markethub-images/';
     const filePaths = urlsToRemove
       .filter(u => typeof u === 'string' && u.includes(marker))
@@ -1116,7 +1152,6 @@ export async function saveSellerShippingAndQr(e) {
     state.currentSellerRecord = updatedSeller;
   }
 
-  // I-update ang shop_name sa lahat ng products ng seller at i-check kung may RLS error
   const { error: prodError } = await supabaseClient
     .from('products')
     .update({ shop_name: newShopName })
@@ -1141,6 +1176,7 @@ Object.assign(window, {
   renderSellerOrders,
   verifyQrPayment,
   updateSellerOrderStatus,
+  toggleVoucherValueInput,
   generateRandomVoucherCode,
   loadSellerVouchers,
   createSellerVoucher,
