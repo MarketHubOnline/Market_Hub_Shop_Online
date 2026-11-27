@@ -37,7 +37,7 @@
           <button id="nav-seller-btn" class="top-link-btn hidden" onclick="switchView('seller')">Seller Centre</button>
           <button id="nav-apply-seller-btn" class="top-link-btn hidden" onclick="openSellerApplyModal()">Start Selling</button>
           <button id="nav-admin-btn" class="top-link-btn hidden" onclick="switchView('admin')">Admin Panel</button>
-          <button id="nav-orders-btn" class="top-link-btn hidden" onclick="switchView('orders')">My Purchases</button>
+          <button id="nav-orders-btn" class="top-link-btn hidden" onclick="switchView('orders', 'purchases')">My Purchases</button>
           <button id="nav-chat-btn" class="top-link-btn hidden" onclick="openChatHub()">
             💬 Messages <span id="header-chat-badge" class="notif-badge hidden">0</span>
           </button>
@@ -63,8 +63,8 @@
             </div>
           </div>
 
-          <span id="user-pill" class="user-pill hidden" onclick="switchView('orders')" title="View My Account & Purchases">
-            <span class="user-avatar-dot" id="user-avatar-initial">U</span>
+          <span id="user-pill" class="user-pill hidden" onclick="switchView('orders', 'profile')" title="Edit My Profile & Account">
+            <span class="user-avatar-dot" id="user-avatar-initial" style="overflow:hidden;">U</span>
             <span id="user-display-name">User</span>
           </span>
           <span id="role-badge" class="badge hidden">guest</span>
@@ -408,18 +408,18 @@
     </section>
 
     <!-- =========================================================
-         VIEW 2: SELLER CENTRE (5 TABS: HOME, MY PRODUCTS, POST PRODUCT, INCOME, SHIPPING)
+         VIEW 2: SELLER CENTRE (6 TABS: HOME, MY PRODUCTS, POST PRODUCT, VOUCHERS, INCOME, SHIPPING)
          ========================================================= -->
     <section id="view-seller" class="hidden">
       <div class="row-between" style="margin-bottom:0.85rem;">
         <div>
           <h2 style="margin:0;color:var(--primary-deep);">🏪 Seller Centre</h2>
-          <p id="seller-shop-subtitle" style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Manage your store orders, live product catalog, profit analytics, and delivery settings.</p>
+          <p id="seller-shop-subtitle" style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Manage your store orders, live product catalog, shop vouchers, profit analytics, and delivery settings.</p>
         </div>
         <button class="secondary sm" onclick="switchView('marketplace')">← Back to Marketplace</button>
       </div>
 
-      <div class="seller-menu-bar">
+      <div class="seller-menu-bar" style="grid-template-columns:repeat(6, 1fr);">
         <button id="seller-nav-home" class="seller-menu-btn active" onclick="switchSellerTab('home')">
           🏠 My Home
         </button>
@@ -427,13 +427,16 @@
           📦 My Products
         </button>
         <button id="seller-nav-products" class="seller-menu-btn" onclick="switchSellerTab('products')">
-          ➕ Post / Edit Product
+          ➕ Post / Edit
+        </button>
+        <button id="seller-nav-vouchers" class="seller-menu-btn" onclick="switchSellerTab('vouchers')">
+          🎟️ Shop Vouchers
         </button>
         <button id="seller-nav-income" class="seller-menu-btn" onclick="switchSellerTab('income')">
           📊 Income &amp; Profit
         </button>
         <button id="seller-nav-shipping" class="seller-menu-btn" onclick="switchSellerTab('shipping')">
-          🚚 Shipping Settings
+          🚚 Shipping &amp; QR
         </button>
       </div>
 
@@ -622,7 +625,70 @@
         </div>
       </div>
 
-      <!-- TAB 4: INCOME & PROFIT MONITORING -->
+      <!-- TAB 4: SHOP VOUCHER GENERATOR -->
+      <div id="seller-tab-vouchers" class="hidden">
+        <div class="panel">
+          <h3 style="margin:0 0 0.25rem;">🎟️ Shop Voucher Generator</h3>
+          <p style="margin:0 0 1rem;font-size:0.82rem;color:var(--muted);">Create custom discount vouchers for your shop. Buyers can view your vouchers in their Account Center and apply the code during checkout.</p>
+
+          <form onsubmit="createSellerVoucher(event)">
+            <div class="form-grid">
+              <div>
+                <label class="field-label">Voucher Code *</label>
+                <div style="display:flex;gap:0.4rem;">
+                  <input type="text" id="voucher-code-input" required placeholder="e.g. FRESH50" style="text-transform:uppercase;font-weight:700;" />
+                  <button type="button" class="secondary sm" onclick="generateRandomVoucherCode()">🎲 Auto</button>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Discount Type *</label>
+                <select id="voucher-type-select">
+                  <option value="fixed">💵 Fixed Amount Off (₱)</option>
+                  <option value="percent">🏷️ Percentage Discount (%)</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">Discount Value (₱ or %) *</label>
+                <input type="number" id="voucher-value-input" step="0.01" min="1" required placeholder="e.g. 50 or 10" />
+              </div>
+              <div>
+                <label class="field-label">Minimum Shop Spend (₱)</label>
+                <input type="number" id="voucher-min-spend" step="0.01" min="0" value="0" placeholder="0 = No minimum" />
+              </div>
+              <div>
+                <label class="field-label">Usage Limit (Max Claims)</label>
+                <input type="number" id="voucher-usage-limit" min="1" value="50" />
+              </div>
+              <div>
+                <label class="field-label">Expiration Date (Optional)</label>
+                <input type="date" id="voucher-expiry-date" />
+              </div>
+            </div>
+            <div style="margin-top:0.9rem;">
+              <button type="submit" class="shop-cta">🎟️ Create &amp; Publish Shop Voucher</button>
+            </div>
+          </form>
+
+          <h4 style="margin:1.35rem 0 0.45rem;">Active &amp; Past Shop Vouchers</h4>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Voucher Code</th>
+                  <th>Discount</th>
+                  <th>Min. Spend</th>
+                  <th>Claimed / Limit</th>
+                  <th>Valid Until</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="seller-vouchers-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: INCOME & PROFIT MONITORING -->
       <div id="seller-tab-income" class="hidden">
         <div class="panel">
           <div class="row-between" style="margin-bottom:0.85rem;flex-wrap:wrap;gap:0.65rem;">
@@ -799,7 +865,7 @@
         </div>
       </div>
 
-      <!-- TAB 5: SHIPPING & QR PAYMENT SETTINGS -->
+      <!-- TAB 6: SHIPPING & QR PAYMENT SETTINGS -->
       <div id="seller-tab-shipping" class="hidden">
         <div class="panel">
           <h3 style="margin:0 0 0.25rem;">🚚 Barangay / Municipality Delivery Rates &amp; Shop QR Payment</h3>
@@ -941,17 +1007,152 @@
     </section>
 
     <!-- =========================================================
-         VIEW 4: BUYER MY PURCHASES
+         VIEW 4: ACCOUNT CENTER (MY PROFILE, VOUCHERS & PURCHASES)
          ========================================================= -->
     <section id="view-orders" class="hidden">
       <div class="row-between" style="margin-bottom:0.85rem;">
         <div>
-          <h2 style="margin:0;color:var(--primary-deep);">🛍️ My Purchases &amp; Order Tracking</h2>
-          <p style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Track live delivery status, chat sellers, view official delivery receipts, and rate delivered items.</p>
+          <h2 style="margin:0;color:var(--primary-deep);">👤 My Account Center</h2>
+          <p style="margin:0.15rem 0 0;font-size:0.84rem;color:var(--muted);">Manage your profile details, default delivery address, vouchers, and order purchases.</p>
         </div>
         <button class="secondary sm" onclick="switchView('marketplace')">← Continue Shopping</button>
       </div>
-      <div id="buyer-orders-list"></div>
+
+      <div style="display:grid;grid-template-columns:230px 1fr;gap:1.1rem;align-items:start;">
+        <!-- Left Account Sidebar -->
+        <aside class="panel" style="padding:1rem;">
+          <div style="display:flex;align-items:center;gap:0.7rem;padding-bottom:0.85rem;border-bottom:1px solid var(--border);margin-bottom:0.75rem;">
+            <div style="width:46px;height:46px;border-radius:50%;background:var(--primary-tint);color:var(--primary-deep);font-weight:800;display:flex;align-items:center;justify-content:center;overflow:hidden;border:2px solid var(--primary);flex-shrink:0;">
+              <img id="acct-sidebar-avatar-img" src="" alt="" class="hidden" style="width:100%;height:100%;object-fit:cover;" />
+              <span id="acct-sidebar-avatar-initial" style="font-size:1.1rem;">U</span>
+            </div>
+            <div style="min-width:0;">
+              <strong id="acct-sidebar-username" style="display:block;font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">user</strong>
+              <button type="button" class="text-link-btn" style="font-size:0.74rem;text-decoration:none;" onclick="openAccountTab('profile')">✏️ Edit Profile</button>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:0.3rem;">
+            <button type="button" id="acct-nav-profile" class="sidebar-cat-item" onclick="openAccountTab('profile')">👤 My Profile</button>
+            <button type="button" id="acct-nav-address" class="sidebar-cat-item" onclick="openAccountTab('address')">📍 My Addresses</button>
+            <button type="button" id="acct-nav-password" class="sidebar-cat-item" onclick="openAccountTab('password')">🔒 Change Password</button>
+            <button type="button" id="acct-nav-purchases" class="sidebar-cat-item active" onclick="openAccountTab('purchases')">🛍️ My Purchases</button>
+            <button type="button" id="acct-nav-vouchers" class="sidebar-cat-item" onclick="openAccountTab('vouchers')">🎟️ My Vouchers</button>
+          </div>
+        </aside>
+
+        <!-- Right Account Content Area -->
+        <div>
+          <!-- PANEL A: MY PROFILE EDITING -->
+          <div id="acct-panel-profile" class="panel hidden">
+            <div style="border-bottom:1px solid var(--border);padding-bottom:0.75rem;margin-bottom:1.1rem;">
+              <h3 style="margin:0;">My Profile</h3>
+              <p style="margin:0.2rem 0 0;font-size:0.8rem;color:var(--muted);">Manage and protect your account details across Buyer, Seller, and Admin views.</p>
+            </div>
+
+            <form onsubmit="saveUserProfile(event)" style="display:grid;grid-template-columns:1fr 220px;gap:1.5rem;align-items:start;">
+              <div style="display:flex;flex-direction:column;gap:0.85rem;">
+                <div>
+                  <label class="field-label">Username *</label>
+                  <input type="text" id="prof-username" required placeholder="e.g. gilbertaniel12" />
+                </div>
+                <div>
+                  <label class="field-label">Full Name *</label>
+                  <input type="text" id="prof-fullname" required placeholder="e.g. Gilbert S. Aniel" />
+                </div>
+                <div>
+                  <label class="field-label">Email Address</label>
+                  <input type="email" id="prof-email" disabled style="background:#f8fafc;color:var(--muted);" />
+                </div>
+                <div>
+                  <label class="field-label">Phone Number</label>
+                  <input type="text" id="prof-phone" placeholder="09XX-XXX-XXXX" />
+                </div>
+                <div>
+                  <label class="field-label">Gender</label>
+                  <div style="display:flex;gap:1.25rem;padding-top:0.25rem;font-size:0.86rem;">
+                    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer;"><input type="radio" name="prof-gender" value="Male" style="width:auto;" /> Male</label>
+                    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer;"><input type="radio" name="prof-gender" value="Female" style="width:auto;" /> Female</label>
+                    <label style="display:inline-flex;align-items:center;gap:0.35rem;cursor:pointer;"><input type="radio" name="prof-gender" value="Other" style="width:auto;" /> Other</label>
+                  </div>
+                </div>
+                <div>
+                  <label class="field-label">Date of Birth</label>
+                  <input type="date" id="prof-birthday" />
+                </div>
+                <div>
+                  <button type="submit" class="shop-cta" style="padding:0.62rem 1.75rem;">Save Profile</button>
+                </div>
+              </div>
+
+              <div style="border-left:1px solid var(--border);padding-left:1.25rem;text-align:center;">
+                <div style="width:105px;height:105px;border-radius:50%;margin:0 auto 0.75rem;background:var(--primary-soft);border:2px solid #86efac;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                  <img id="prof-avatar-img" src="" alt="Avatar" class="hidden" style="width:100%;height:100%;object-fit:cover;" />
+                  <span id="prof-avatar-initial" style="font-size:2.4rem;font-weight:800;color:var(--primary-dark);">U</span>
+                </div>
+                <input type="file" id="prof-avatar-file" accept="image/*" class="hidden" onchange="handleProfileAvatarUpload(event)" />
+                <button type="button" class="secondary sm" onclick="document.getElementById('prof-avatar-file').click()">Select Image</button>
+                <div style="font-size:0.72rem;color:var(--muted);margin-top:0.55rem;line-height:1.4;">
+                  Auto-compressed • .JPEG, .PNG
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- PANEL B: DEFAULT ADDRESS -->
+          <div id="acct-panel-address" class="panel hidden">
+            <h3 style="margin:0 0 0.25rem;">📍 Default Delivery Address</h3>
+            <p style="margin:0 0 1rem;font-size:0.8rem;color:var(--muted);">Saved address auto-fills during checkout so you can place orders faster.</p>
+            <form onsubmit="saveUserDefaultAddress(event)">
+              <div class="form-grid">
+                <div>
+                  <label class="field-label">Default Barangay / Municipality</label>
+                  <input type="text" id="prof-default-barangay" placeholder="e.g. Brgy. Dangay, Roxas" />
+                </div>
+                <div>
+                  <label class="field-label">Complete Street / House / Landmark</label>
+                  <input type="text" id="prof-default-address" placeholder="Sitio / Street / House No." />
+                </div>
+              </div>
+              <button type="submit" class="shop-cta" style="margin-top:0.85rem;">Save Address</button>
+            </form>
+          </div>
+
+          <!-- PANEL C: CHANGE PASSWORD -->
+          <div id="acct-panel-password" class="panel hidden">
+            <h3 style="margin:0 0 0.25rem;">🔒 Change Password</h3>
+            <p style="margin:0 0 1rem;font-size:0.8rem;color:var(--muted);">Set a new password (minimum 6 characters).</p>
+            <form onsubmit="changeUserPassword(event)" style="max-width:380px;">
+              <div style="margin-bottom:0.75rem;">
+                <label class="field-label">New Password *</label>
+                <input type="password" id="acct-new-pass" required minlength="6" />
+              </div>
+              <div style="margin-bottom:0.85rem;">
+                <label class="field-label">Confirm New Password *</label>
+                <input type="password" id="acct-confirm-pass" required minlength="6" />
+              </div>
+              <button type="submit" class="shop-cta">Update Password</button>
+            </form>
+          </div>
+
+          <!-- PANEL D: MY PURCHASES -->
+          <div id="acct-panel-purchases">
+            <div id="buyer-orders-list"></div>
+          </div>
+
+          <!-- PANEL E: MY VOUCHERS WALLET -->
+          <div id="acct-panel-vouchers" class="panel hidden">
+            <div class="row-between" style="margin-bottom:0.85rem;">
+              <div>
+                <h3 style="margin:0;">🎟️ Available Shop Vouchers</h3>
+                <p style="margin:0.2rem 0 0;font-size:0.8rem;color:var(--muted);">Copy any active shop voucher code below and paste it at Checkout for instant discounts.</p>
+              </div>
+              <button type="button" class="secondary sm" onclick="loadAvailableVouchersWallet()">↻ Refresh</button>
+            </div>
+            <div id="acct-vouchers-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:0.75rem;"></div>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -1062,9 +1263,21 @@
           </div>
         </div>
 
+        <div style="margin-top:0.85rem;background:var(--primary-soft);border:1px dashed #4ade80;border-radius:8px;padding:0.75rem;">
+          <label class="field-label">🎟️ Have a Shop Voucher Code?</label>
+          <div style="display:flex;gap:0.45rem;">
+            <input type="text" id="checkout-voucher-code" placeholder="Enter shop voucher code (e.g. FRESH50)" style="text-transform:uppercase;font-weight:700;" />
+            <button type="button" class="add-cart-outline sm" onclick="applyCheckoutVoucher()">Apply</button>
+          </div>
+          <div id="checkout-voucher-msg" style="font-size:0.76rem;margin-top:0.35rem;font-weight:600;"></div>
+        </div>
+
         <div class="delivery-summary-card" style="margin-top:0.85rem;">
           <div class="row-between"><span>Items Subtotal:</span><strong id="checkout-subtotal">₱0.00</strong></div>
           <div class="row-between" style="margin-top:0.25rem;"><span>Delivery Fee (by Barangay/Item):</span><strong id="checkout-shipping">₱0.00</strong></div>
+          <div id="checkout-discount-row" class="row-between hidden" style="margin-top:0.25rem;color:var(--primary-dark);">
+            <span>🎟️ Shop Voucher Discount:</span><strong id="checkout-discount-val">-₱0.00</strong>
+          </div>
           <div class="row-between" style="margin-top:0.45rem;padding-top:0.45rem;border-top:1px solid #86efac;font-size:1rem;color:var(--primary-deep);">
             <span>Grand Total Payable:</span>
             <strong id="checkout-grand-total">₱0.00</strong>
@@ -1199,6 +1412,6 @@
       caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
     }
   </script>
-  <script type="module" src="js/chat.js?v=20261126"></script>
+  <script type="module" src="js/chat.js?v=20261127"></script>
 </body>
 </html>
