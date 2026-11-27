@@ -207,8 +207,12 @@ export function updateShopSelectionUI() {
     hero.classList.add('hidden');
     clearTop.classList.remove('hidden');
     document.getElementById('selected-shop-title').textContent = shop?.shop_name || 'Seller Shop';
-    const descPart = shop?.description ? ` • ${shop.description}` : '';
-    document.getElementById('selected-shop-sub').textContent = `${shop?.location || 'Local Verified Seller'} • ${shop?.phone || ''}${descPart}`;
+
+    const subEl = document.getElementById('selected-shop-sub');
+    subEl.style.whiteSpace = 'pre-line';
+    subEl.textContent = (shop?.description && shop.description.trim())
+      ? shop.description.trim()
+      : 'Verified Local Storefront';
 
     const avatarEl = document.getElementById('selected-shop-avatar');
     avatarEl.style.overflow = 'hidden';
