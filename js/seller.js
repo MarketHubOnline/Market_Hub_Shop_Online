@@ -883,6 +883,7 @@ export async function saveSellerShippingAndQr(e) {
   if (!supabaseClient || !state.currentUser) return;
 
   const newShopName = document.getElementById('ship-shop-name').value.trim();
+  if (!newShopName) return showToast('Please enter a shop name.', 'warning');
 
   const payload = {
     user_id: state.currentUser.id,
@@ -895,14 +896,27 @@ export async function saveSellerShippingAndQr(e) {
     qr_image_url: state.tempSellerQrUrl
   };
 
-  const { error } = await supabaseClient.from('sellers').upsert(payload, { onConflict: 'user_id' });
+  const { data: updatedSeller, error } = await supabaseClient
+    .from('sellers')
+    .upsert(payload, { onConflict: 'user_id' })
+    .select()
+    .single();
+
   if (error) return showToast(error.message, 'error');
 
-  // Awtomatikong i-update ang shop_name sa lahat ng existing products ng seller
-  await supabaseClient
+  if (updatedSeller) {
+    state.currentSellerRecord = updatedSeller;
+  }
+
+  // I-update ang shop_name sa lahat ng products ng seller at i-check kung may RLS error
+  const { error: prodError } = await supabaseClient
     .from('products')
     .update({ shop_name: newShopName })
     .eq('seller_id', state.currentUser.id);
+
+  if (prodError) {
+    console.warn('Products shop_name sync warning:', prodError.message);
+  }
 
   showToast('Shop name, shipping rates & QR settings saved!');
   await loadUserSession();
