@@ -1075,15 +1075,19 @@
     </div>
   </div>
 
-  <!-- MODAL 3: APPLY SELLER -->
+<!-- MODAL 3: APPLY SELLER -->
   <div id="seller-apply-modal" class="modal-backdrop hidden" onclick="if(event.target===this) closeSellerApplyModal()">
     <div class="modal" style="max-width:460px;">
       <div class="row-between" style="margin-bottom:0.75rem;">
         <h3 style="margin:0;color:var(--primary-deep);">🏪 Apply as a MarketHub Seller</h3>
         <button class="secondary sm" onclick="closeSellerApplyModal()">✕</button>
       </div>
+
+      <!-- Dynamic Application Status Banner (Rejected / Suspended / Pending) -->
+      <div id="seller-apply-status-banner" class="hidden" style="padding:0.75rem;border-radius:8px;margin-bottom:0.85rem;font-size:0.82rem;line-height:1.45;"></div>
+
       <p style="font-size:0.82rem;color:var(--muted);margin-top:0;">Sell fresh farm produce, gadgets, or local goods. Platform fee is 10% per completed order.</p>
-      <form onsubmit="submitSellerApplication(event)">
+      <form id="seller-apply-form" onsubmit="submitSellerApplication(event)">
         <div style="margin-bottom:0.75rem;">
           <label class="field-label">Shop / Farm Name *</label>
           <input type="text" id="apply-shop-name" required placeholder="e.g. Dangay Highland Farm" />
@@ -1100,7 +1104,7 @@
           <label class="field-label">What products do you plan to sell?</label>
           <textarea id="apply-shop-desc" rows="2" placeholder="Fresh vegetables, fruits, smartphones, accessories..."></textarea>
         </div>
-        <button type="submit" class="shop-cta" style="width:100%;">Submit Seller Application</button>
+        <button type="submit" id="seller-apply-submit-btn" class="shop-cta" style="width:100%;">Submit Seller Application</button>
       </form>
     </div>
   </div>
