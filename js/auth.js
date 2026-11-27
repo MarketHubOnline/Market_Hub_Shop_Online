@@ -157,12 +157,29 @@ export function updateAuthUI() {
 
   const userEmail = (state.currentUser?.email || '').toLowerCase();
   const role = String(state.currentProfile?.role || 'buyer').trim().toLowerCase();
-  const isApprovedSeller = role === 'seller' || state.currentSellerRecord?.status === 'approved';
+  const sellerStatus = state.currentSellerRecord?.status;
+
+  // Kapag suspended o rejected, hindi dapat aktibo ang Seller Centre access maliban kung admin
+  const isApprovedSeller = sellerStatus === 'approved' || (role === 'seller' && sellerStatus !== 'suspended' && sellerStatus !== 'rejected');
   const isAdmin = role === 'admin' || SUPER_ADMIN_EMAILS.includes(userEmail);
 
   document.getElementById('nav-seller-btn')?.classList.toggle('hidden', !(loggedIn && (isApprovedSeller || isAdmin)));
   document.getElementById('nav-apply-seller-btn')?.classList.toggle('hidden', !(loggedIn && !isApprovedSeller && !isAdmin));
   document.getElementById('nav-admin-btn')?.classList.toggle('hidden', !(loggedIn && isAdmin));
+
+  // I-update ang label ng Apply button kung rejected o suspended
+  const applyBtn = document.getElementById('nav-apply-seller-btn');
+  if (applyBtn && loggedIn && !isApprovedSeller && !isAdmin) {
+    if (sellerStatus === 'rejected') {
+      applyBtn.innerHTML = '⚠️ Start Selling <span style="background:#ef4444;color:#fff;padding:1px 5px;border-radius:4px;font-size:0.65rem;margin-left:3px;">Rejected</span>';
+    } else if (sellerStatus === 'suspended') {
+      applyBtn.innerHTML = '⏸ Shop Suspended';
+    } else if (sellerStatus === 'pending') {
+      applyBtn.innerHTML = '⏳ Application Pending';
+    } else {
+      applyBtn.textContent = 'Start Selling';
+    }
+  }
 
   if (loggedIn) {
     const display =
@@ -178,7 +195,7 @@ export function updateAuthUI() {
 
     const badge = document.getElementById('role-badge');
     if (badge) {
-      badge.textContent = isAdmin ? 'ADMIN' : (isApprovedSeller ? 'SELLER' : 'BUYER');
+      badge.textContent = isAdmin ? 'ADMIN' : (isApprovedSeller ? 'SELLER' : (sellerStatus === 'suspended' ? 'SUSPENDED' : 'BUYER'));
       badge.className = `badge ${isAdmin ? 'admin' : (isApprovedSeller ? 'seller' : '')}`;
     }
   }
