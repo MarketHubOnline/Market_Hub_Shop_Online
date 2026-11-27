@@ -223,12 +223,13 @@ export function renderProducts() {
 
   let filtered = state.allProducts.filter(p => {
     const isFree = p.is_free_shipping === true || Number(p.shipping_fee || 0) === 0;
+    const liveShopName = state.allSellers.find(s => s.user_id === p.seller_id)?.shop_name || p.shop_name || '';
     if (state.selectedCategory !== 'All Categories' && p.category !== state.selectedCategory) return false;
     if (state.selectedShopId !== 'all' && p.seller_id !== state.selectedShopId) return false;
     if (freeShipOnly && !isFree) return false;
     if (inStockOnly && Number(p.stock || 0) <= 0) return false;
     if (q) {
-      const hay = `${p.title || ''} ${p.category || ''} ${p.shop_name || ''} ${p.description || ''} ${p.delivery_area || ''}`.toLowerCase();
+      const hay = `${p.title || ''} ${p.category || ''} ${liveShopName} ${p.description || ''} ${p.delivery_area || ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -258,7 +259,8 @@ export function renderProducts() {
     const stockNum = Number(p.stock ?? 99);
     const outOfStock = stockNum <= 0;
     const freeShip = p.is_free_shipping === true || Number(p.shipping_fee || 0) === 0;
-    const shopName = p.shop_name || state.allSellers.find(s => s.user_id === p.seller_id)?.shop_name || 'Verified Shop';
+    const liveShopName = state.allSellers.find(s => s.user_id === p.seller_id)?.shop_name;
+    const shopName = liveShopName || p.shop_name || 'Verified Shop';
 
     return `
       <div class="card" onclick="openExpandedProduct('${escapeHtml(p.id)}')">
