@@ -221,7 +221,12 @@ export function renderProducts() {
   const freeShipOnly = document.getElementById('filter-free-ship')?.checked;
   const inStockOnly = document.getElementById('filter-in-stock')?.checked;
 
+  // Tanging products ng mga APPROVED sellers lang ang makikita ng buyers (suspended/pending/rejected ay matic nakatago)
+  const approvedSellerIds = new Set(state.allSellers.map(s => s.user_id));
+
   let filtered = state.allProducts.filter(p => {
+    if (!approvedSellerIds.has(p.seller_id)) return false;
+
     const isFree = p.is_free_shipping === true || Number(p.shipping_fee || 0) === 0;
     const liveShopName = state.allSellers.find(s => s.user_id === p.seller_id)?.shop_name || p.shop_name || '';
     if (state.selectedCategory !== 'All Categories' && p.category !== state.selectedCategory) return false;
