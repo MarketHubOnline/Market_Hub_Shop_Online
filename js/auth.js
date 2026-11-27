@@ -10,6 +10,7 @@ import { switchView } from './navigation.js';
 
 const SUPER_ADMIN_EMAILS = ['giboaniel@gmail.com'];
 let authMode = 'signin';
+let authListenerAttached = false;
 
 export function openAuthModal(mode = 'signin') {
   switchAuthTab(mode);
@@ -82,7 +83,9 @@ export async function handleAuthSubmit(e) {
 }
 
 export async function signOut() {
-  if (supabaseClient) await supabaseClient.auth.signOut();
+  if (supabaseClient) {
+    await supabaseClient.auth.signOut({ scope: 'local' }).catch(() => {});
+  }
   state.currentUser = null;
   state.currentProfile = null;
   state.currentSellerRecord = null;
@@ -91,15 +94,62 @@ export async function signOut() {
   showToast('Signed out.');
 }
 
+function attachAuthStateWatcher() {
+  if (!supabaseClient || authListenerAttached) return;
+  authListenerAttached = true;
+
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'TOKEN_REFRESHED' && session?.user) {
+      state.currentUser = session.user;
+    } else if (event === 'SIGNED_OUT') {
+      state.currentUser = null;
+      state.currentProfile = null;
+      state.currentSellerRecord = null;
+      updateAuthUI();
+    }
+  });
+}
+
 export async function loadUserSession() {
   if (!supabaseClient) {
     loadDemoFallbackData();
     return;
   }
-  const { data: { session } } = await supabaseClient.auth.getSession();
+
+  attachAuthStateWatcher();
+
+  const { data: { session }, error: sessionErr } = await supabaseClient.auth.getSession();
+
+  if (sessionErr) {
+    await supabaseClient.auth.signOut({ scope: 'local' }).catch(() => {});
+    state.currentUser = null;
+    state.currentProfile = null;
+    state.currentSellerRecord = null;
+    updateAuthUI();
+    await loadMarketplaceData();
+    return;
+  }
+
   state.currentUser = session?.user || null;
 
   if (state.currentUser) {
+    // I-verify sa server at i-refresh ang token kung malapit nang mag-expire
+    const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
+    if (userErr || !userData?.user) {
+      const { data: refreshed, error: refreshErr } = await supabaseClient.auth.refreshSession();
+      if (refreshErr || !refreshed?.user) {
+        await supabaseClient.auth.signOut({ scope: 'local' }).catch(() => {});
+        state.currentUser = null;
+        state.currentProfile = null;
+        state.currentSellerRecord = null;
+        updateAuthUI();
+        showToast('Session expired. Please sign in again.', 'warning');
+        await loadMarketplaceData();
+        return;
+      }
+      state.currentUser = refreshed.user;
+    }
+
     const userEmail = (state.currentUser.email || '').toLowerCase();
     const isSuperAdmin = SUPER_ADMIN_EMAILS.includes(userEmail);
 
@@ -158,7 +208,6 @@ export function updateAuthUI() {
   const role = String(state.currentProfile?.role || 'buyer').trim().toLowerCase();
   const sellerStatus = state.currentSellerRecord?.status;
 
-  // Kapag suspended o rejected, hindi dapat aktibo ang Seller Centre access maliban kung admin
   const isApprovedSeller = sellerStatus === 'approved' || (role === 'seller' && sellerStatus !== 'suspended' && sellerStatus !== 'rejected');
   const isAdmin = role === 'admin' || SUPER_ADMIN_EMAILS.includes(userEmail);
 
@@ -166,7 +215,6 @@ export function updateAuthUI() {
   document.getElementById('nav-apply-seller-btn')?.classList.toggle('hidden', !(loggedIn && !isApprovedSeller && !isAdmin));
   document.getElementById('nav-admin-btn')?.classList.toggle('hidden', !(loggedIn && isAdmin));
 
-  // I-update ang label ng Apply button kung rejected o suspended
   const applyBtn = document.getElementById('nav-apply-seller-btn');
   if (applyBtn && loggedIn && !isApprovedSeller && !isAdmin) {
     if (sellerStatus === 'rejected') {
