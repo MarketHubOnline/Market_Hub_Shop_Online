@@ -148,7 +148,6 @@ export async function loadUserSession() {
 export function updateAuthUI() {
   const loggedIn = !!state.currentUser;
   document.getElementById('auth-btn')?.classList.toggle('hidden', loggedIn);
-  document.getElementById('logout-btn')?.classList.toggle('hidden', !loggedIn);
   document.getElementById('user-pill')?.classList.toggle('hidden', !loggedIn);
   document.getElementById('role-badge')?.classList.toggle('hidden', !loggedIn);
   document.getElementById('nav-orders-btn')?.classList.toggle('hidden', !loggedIn);
@@ -182,8 +181,10 @@ export function updateAuthUI() {
   }
 
   if (loggedIn) {
+    const prof = state.currentProfile || {};
     const display =
-      state.currentProfile?.full_name ||
+      (prof.username && prof.username.trim()) ||
+      (prof.full_name && prof.full_name.trim()) ||
       state.currentUser.user_metadata?.full_name ||
       state.currentUser.user_metadata?.name ||
       state.currentUser.email.split('@')[0];
@@ -191,7 +192,13 @@ export function updateAuthUI() {
     const nameEl = document.getElementById('user-display-name');
     const avatarEl = document.getElementById('user-avatar-initial');
     if (nameEl) nameEl.textContent = display;
-    if (avatarEl) avatarEl.textContent = display.charAt(0).toUpperCase();
+    if (avatarEl) {
+      if (prof.avatar_url) {
+        avatarEl.innerHTML = `<img src="${prof.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" />`;
+      } else {
+        avatarEl.textContent = display.charAt(0).toUpperCase();
+      }
+    }
 
     const badge = document.getElementById('role-badge');
     if (badge) {
@@ -208,5 +215,6 @@ Object.assign(window, {
   switchAuthTab,
   signInWithGoogle,
   handleAuthSubmit,
-  signOut
+  signOut,
+  updateAuthUI
 });
