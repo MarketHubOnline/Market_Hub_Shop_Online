@@ -4,31 +4,21 @@
 import { supabaseClient, COMMISSION_RATE, state } from './config.js';
 import { escapeHtml, formatPeso, showToast } from './utils.js';
 import { openAuthModal } from './auth.js';
-import { saveCartToStorage, closeCartModal, computeShippingForSellerGroup } from './cart.js';
+import { saveCartToStorage, closeCartModal, computeShippingForSellerGroup, toggleCheckoutAddressEdit } from './cart.js';
 import { loadMarketplaceData } from './marketplace.js';
 import { switchView } from './navigation.js';
 import { createNotification } from './chat.js';
 
 export function selectPaymentMethod(method) {
   state.selectedPaymentMethod = method;
-  document.getElementById('pay-card-cod').classList.toggle('active', method === 'COD');
-  document.getElementById('pay-card-qr').classList.toggle('active', method === 'QR');
-  document.getElementById('checkout-qr-panel').classList.toggle('hidden', method !== 'QR');
+  document.getElementById('pay-card-cod')?.classList.toggle('active', method === 'COD');
+  document.getElementById('pay-card-qr')?.classList.toggle('active', method === 'QR');
+  document.getElementById('checkout-qr-panel')?.classList.toggle('hidden', method !== 'QR');
 }
 
 export function renderCheckoutQrSellers() {
-  if (state.currentProfile) {
-    const nEl = document.getElementById('checkout-name');
-    const pEl = document.getElementById('checkout-phone');
-    const bEl = document.getElementById('checkout-barangay');
-    const aEl = document.getElementById('checkout-address');
-    if (nEl && !nEl.value && state.currentProfile.full_name) nEl.value = state.currentProfile.full_name;
-    if (pEl && !pEl.value && state.currentProfile.phone) pEl.value = state.currentProfile.phone;
-    if (bEl && !bEl.value && state.currentProfile.default_barangay) bEl.value = state.currentProfile.default_barangay;
-    if (aEl && !aEl.value && state.currentProfile.default_address) aEl.value = state.currentProfile.default_address;
-  }
-
   const box = document.getElementById('checkout-qr-sellers-list');
+  if (!box) return;
   const uniqueSellerIds = [...new Set(state.cart.map(c => c.seller_id))];
   box.innerHTML = uniqueSellerIds.map(sid => {
     const seller = state.allSellers.find(s => s.user_id === sid);
@@ -62,15 +52,15 @@ export async function placeOrder() {
   }
   if (!state.cart.length) return;
 
-  const recipientName = document.getElementById('checkout-name').value.trim();
-  const recipientPhone = document.getElementById('checkout-phone').value.trim();
-  const barangay = document.getElementById('checkout-barangay').value.trim();
-  const address = document.getElementById('checkout-address').value.trim();
-  const notes = document.getElementById('checkout-notes').value.trim();
-  const qrRef = document.getElementById('checkout-qr-ref').value.trim();
+  const recipientName = document.getElementById('checkout-name')?.value.trim() || '';
+  const recipientPhone = document.getElementById('checkout-phone')?.value.trim() || '';
+  const barangay = document.getElementById('checkout-barangay')?.value.trim() || '';
+  const address = document.getElementById('checkout-address')?.value.trim() || '';
+  const qrRef = document.getElementById('checkout-qr-ref')?.value.trim() || '';
 
   if (!recipientName || !recipientPhone || !barangay || !address) {
-    return showToast('Please complete all delivery details.', 'error');
+    toggleCheckoutAddressEdit(true);
+    return showToast('Please complete your delivery address first.', 'error');
   }
   if (state.selectedPaymentMethod === 'QR' && !qrRef) {
     return showToast('Please enter your QR / E-Wallet payment reference number.', 'error');
@@ -87,6 +77,12 @@ export async function placeOrder() {
   btn.disabled = true;
 
   try {
+    const shopNotesMap = {};
+    document.querySelectorAll('.shop-order-note-input').forEach(inp => {
+      const sid = inp.getAttribute('data-seller-id');
+      if (sid) shopNotesMap[sid] = inp.value.trim();
+    });
+
     const grouped = {};
     state.cart.forEach(item => {
       if (!grouped[item.seller_id]) grouped[item.seller_id] = [];
@@ -98,6 +94,7 @@ export async function placeOrder() {
     for (const [sellerId, items] of Object.entries(grouped)) {
       const rawSubtotal = items.reduce((s, i) => s + Number(i.price) * Number(i.qty), 0);
       const rawShippingFee = computeShippingForSellerGroup(sellerId, items, barangay);
+      const notes = shopNotesMap[sellerId] || '';
 
       let itemDiscount = 0;
       let shippingDiscount = 0;
