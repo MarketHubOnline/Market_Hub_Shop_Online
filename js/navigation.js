@@ -1,10 +1,10 @@
 // =========================================================
-// VIEW ROUTING & PWA INSTALL PROMPT HANDLERS
+// VIEW ROUTING, ACCOUNT CENTER ROUTING & PWA HANDLERS
 // =========================================================
 import { state } from './config.js';
 import { loadSellerDashboard } from './seller.js';
 import { loadAdminDashboard } from './admin.js';
-import { loadBuyerOrders } from './orders.js';
+import { loadBuyerOrders, openAccountTab } from './orders.js';
 
 export function initPwaHandlers() {
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -31,7 +31,7 @@ export async function triggerPwaInstall() {
   document.getElementById('pwa-install-btn')?.classList.add('hidden');
 }
 
-export function switchView(viewName) {
+export function switchView(viewName, subTab = null) {
   ['view-marketplace', 'view-product-detail', 'view-seller', 'view-admin', 'view-orders'].forEach(id => {
     document.getElementById(id)?.classList.add('hidden');
   });
@@ -40,7 +40,10 @@ export function switchView(viewName) {
 
   if (viewName === 'seller') loadSellerDashboard();
   if (viewName === 'admin') loadAdminDashboard();
-  if (viewName === 'orders') loadBuyerOrders();
+  if (viewName === 'orders') {
+    openAccountTab(subTab || 'purchases');
+    loadBuyerOrders();
+  }
 }
 
 Object.assign(window, {
