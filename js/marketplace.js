@@ -152,9 +152,13 @@ export function renderVerifiedShops() {
   list.innerHTML = state.allSellers.map(s => {
     const count = state.allProducts.filter(p => p.seller_id === s.user_id).length;
     const isActive = state.selectedShopId === s.user_id;
+    const logoHtml = s.shop_logo
+      ? `<img src="${escapeHtml(s.shop_logo)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" />`
+      : escapeHtml((s.shop_name || 'S').charAt(0).toUpperCase());
+
     return `
       <div class="mall-shop-tile ${isActive ? 'active' : ''}" onclick="selectShopFilter('${escapeHtml(s.user_id)}')">
-        <div class="mall-shop-logo">${escapeHtml((s.shop_name || 'S').charAt(0).toUpperCase())}</div>
+        <div class="mall-shop-logo" style="overflow:hidden;">${logoHtml}</div>
         <div class="mall-shop-name">${escapeHtml(s.shop_name)}</div>
         <div class="mall-shop-meta">${count} item${count === 1 ? '' : 's'}</div>
       </div>
@@ -203,8 +207,16 @@ export function updateShopSelectionUI() {
     hero.classList.add('hidden');
     clearTop.classList.remove('hidden');
     document.getElementById('selected-shop-title').textContent = shop?.shop_name || 'Seller Shop';
-    document.getElementById('selected-shop-sub').textContent = `${shop?.location || 'Local Verified Seller'} • ${shop?.phone || ''}`;
-    document.getElementById('selected-shop-avatar').textContent = (shop?.shop_name || 'S').charAt(0).toUpperCase();
+    const descPart = shop?.description ? ` • ${shop.description}` : '';
+    document.getElementById('selected-shop-sub').textContent = `${shop?.location || 'Local Verified Seller'} • ${shop?.phone || ''}${descPart}`;
+
+    const avatarEl = document.getElementById('selected-shop-avatar');
+    avatarEl.style.overflow = 'hidden';
+    if (shop?.shop_logo) {
+      avatarEl.innerHTML = `<img src="${escapeHtml(shop.shop_logo)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" />`;
+    } else {
+      avatarEl.textContent = (shop?.shop_name || 'S').charAt(0).toUpperCase();
+    }
   }
 }
 
