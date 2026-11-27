@@ -123,12 +123,16 @@ export async function loadSellerDashboard() {
     document.getElementById('ship-shop-name').value = state.currentSellerRecord.shop_name || '';
     document.getElementById('ship-shop-phone').value = state.currentSellerRecord.phone || '';
     document.getElementById('ship-shop-location').value = state.currentSellerRecord.location || '';
+    const descEl = document.getElementById('ship-shop-desc');
+    if (descEl) descEl.value = state.currentSellerRecord.description || '';
     document.getElementById('ship-default-fee').value = Number(state.currentSellerRecord.default_shipping_fee || 0);
     document.getElementById('ship-qr-account').value = state.currentSellerRecord.qr_account_info || '';
     state.tempBarangayRules = Array.isArray(state.currentSellerRecord.barangay_rates) ? [...state.currentSellerRecord.barangay_rates] : [];
     state.tempSellerQrUrl = state.currentSellerRecord.qr_image_url || '';
+    state.tempShopLogoUrl = state.currentSellerRecord.shop_logo || '';
     renderBarangayRules();
     renderSellerQrPreview();
+    refreshShopLogoPreview();
   }
 
   const myProds = state.allProducts.filter(p => p.seller_id === state.currentUser.id);
@@ -1011,6 +1015,44 @@ export function renderBarangayRules() {
   `).join('');
 }
 
+export async function handleShopLogoUpload(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    showToast('Uploading shop logo...', 'success');
+    const folder = `shops/${state.currentUser?.id || 'seller'}`;
+    state.tempShopLogoUrl = await uploadCompressedImageToBucket(file, folder, 500, 0.85);
+    refreshShopLogoPreview();
+    showToast('Shop logo ready! Click Save to apply.');
+  } catch (err) {
+    showToast(err.message || 'Could not upload shop logo.', 'error');
+  }
+}
+
+export function clearShopLogoImage() {
+  state.tempShopLogoUrl = '';
+  const f = document.getElementById('shop-logo-file');
+  if (f) f.value = '';
+  refreshShopLogoPreview();
+}
+
+export function refreshShopLogoPreview() {
+  const img = document.getElementById('shop-logo-preview-img');
+  const initEl = document.getElementById('shop-logo-preview-initial');
+  const rmBtn = document.getElementById('shop-logo-remove-btn');
+  const nameVal = document.getElementById('ship-shop-name')?.value.trim() || state.currentSellerRecord?.shop_name || 'S';
+
+  if (state.tempShopLogoUrl) {
+    if (img) { img.src = state.tempShopLogoUrl; img.classList.remove('hidden'); }
+    if (initEl) initEl.classList.add('hidden');
+    if (rmBtn) rmBtn.classList.remove('hidden');
+  } else {
+    if (img) img.classList.add('hidden');
+    if (initEl) { initEl.textContent = nameVal.charAt(0).toUpperCase(); initEl.classList.remove('hidden'); }
+    if (rmBtn) rmBtn.classList.add('hidden');
+  }
+}
+
 export async function handleSellerQrUpload(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -1054,6 +1096,8 @@ export async function saveSellerShippingAndQr(e) {
     shop_name: newShopName,
     phone: document.getElementById('ship-shop-phone').value.trim(),
     location: document.getElementById('ship-shop-location').value.trim(),
+    description: document.getElementById('ship-shop-desc')?.value.trim() || '',
+    shop_logo: state.tempShopLogoUrl || null,
     default_shipping_fee: Number(document.getElementById('ship-default-fee').value || 0),
     barangay_rates: state.tempBarangayRules,
     qr_account_info: document.getElementById('ship-qr-account').value.trim(),
@@ -1082,7 +1126,7 @@ export async function saveSellerShippingAndQr(e) {
     console.warn('Products shop_name sync warning:', prodError.message);
   }
 
-  showToast('Shop name, shipping rates & QR settings saved!');
+  showToast('Shop profile, shipping rates & QR settings saved!');
   await loadUserSession();
   await loadMarketplaceData();
   await loadSellerDashboard();
@@ -1120,6 +1164,9 @@ Object.assign(window, {
   renderSellerProductsTable,
   addBarangayRate,
   removeBarangayRate,
+  handleShopLogoUpload,
+  clearShopLogoImage,
+  refreshShopLogoPreview,
   handleSellerQrUpload,
   clearSellerQrImage,
   saveSellerShippingAndQr
