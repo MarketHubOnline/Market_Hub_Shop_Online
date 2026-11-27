@@ -1,12 +1,216 @@
 // =========================================================
-// BUYER ORDERS, ORDER TRACKING, REVIEWS & DELIVERY RECEIPT
+// ACCOUNT CENTER (MY PROFILE, VOUCHERS, PURCHASES & RECEIPTS)
 // =========================================================
 import { supabaseClient, state } from './config.js';
-import { escapeHtml, formatPeso, showToast } from './utils.js';
+import { escapeHtml, formatPeso, uploadCompressedImageToBucket, showToast } from './utils.js';
 import { loadMarketplaceData } from './marketplace.js';
+import { updateAuthUI } from './auth.js';
+
+let tempProfileAvatarUrl = '';
+
+export function openAccountTab(tabName) {
+  ['profile', 'address', 'password', 'purchases', 'vouchers'].forEach(t => {
+    document.getElementById(`acct-panel-${t}`)?.classList.toggle('hidden', t !== tabName);
+    document.getElementById(`acct-nav-${t}`)?.classList.toggle('active', t === tabName);
+  });
+
+  if (tabName === 'profile' || tabName === 'address') populateAccountProfileForm();
+  if (tabName === 'vouchers') loadAvailableVouchersWallet();
+}
+
+export function populateAccountProfileForm() {
+  if (!state.currentUser) return;
+  const prof = state.currentProfile || {};
+  const email = state.currentUser.email || '';
+  const defaultUsername = prof.username || email.split('@')[0] || 'member';
+  const fullName = prof.full_name || state.currentUser.user_metadata?.full_name || defaultUsername;
+
+  document.getElementById('acct-sidebar-username').textContent = defaultUsername;
+  document.getElementById('prof-username').value = defaultUsername;
+  document.getElementById('prof-fullname').value = fullName;
+  document.getElementById('prof-email').value = email;
+  document.getElementById('prof-phone').value = prof.phone || '';
+  document.getElementById('prof-birthday').value = prof.birthday || '';
+
+  const genderVal = prof.gender || 'Male';
+  document.querySelectorAll('input[name="prof-gender"]').forEach(r => {
+    r.checked = r.value === genderVal;
+  });
+
+  tempProfileAvatarUrl = prof.avatar_url || '';
+  refreshProfileAvatarUI(fullName);
+
+  // Default Address fields
+  const brgyEl = document.getElementById('prof-default-barangay');
+  const addrEl = document.getElementById('prof-default-address');
+  if (brgyEl) brgyEl.value = prof.default_barangay || '';
+  if (addrEl) addrEl.value = prof.default_address || '';
+}
+
+function refreshProfileAvatarUI(displayName) {
+  const initial = (displayName || 'U').charAt(0).toUpperCase();
+  const sideImg = document.getElementById('acct-sidebar-avatar-img');
+  const sideInit = document.getElementById('acct-sidebar-avatar-initial');
+  const mainImg = document.getElementById('prof-avatar-img');
+  const mainInit = document.getElementById('prof-avatar-initial');
+
+  if (tempProfileAvatarUrl) {
+    if (sideImg) { sideImg.src = tempProfileAvatarUrl; sideImg.classList.remove('hidden'); }
+    if (sideInit) sideInit.classList.add('hidden');
+    if (mainImg) { mainImg.src = tempProfileAvatarUrl; mainImg.classList.remove('hidden'); }
+    if (mainInit) mainInit.classList.add('hidden');
+  } else {
+    if (sideImg) sideImg.classList.add('hidden');
+    if (sideInit) { sideInit.textContent = initial; sideInit.classList.remove('hidden'); }
+    if (mainImg) mainImg.classList.add('hidden');
+    if (mainInit) { mainInit.textContent = initial; mainInit.classList.remove('hidden'); }
+  }
+}
+
+export async function handleProfileAvatarUpload(event) {
+  const file = event.target.files?.[0];
+  if (!file || !state.currentUser) return;
+  try {
+    showToast('Uploading profile photo...', 'success');
+    const folder = `avatars/${state.currentUser.id}`;
+    tempProfileAvatarUrl = await uploadCompressedImageToBucket(file, folder, 500, 0.82);
+    refreshProfileAvatarUI(document.getElementById('prof-fullname').value);
+    showToast('Photo ready! Click "Save Profile" to apply.');
+  } catch (err) {
+    showToast(err.message || 'Avatar upload failed.', 'error');
+  }
+}
+
+export async function saveUserProfile(e) {
+  e.preventDefault();
+  if (!supabaseClient || !state.currentUser) return;
+
+  const username = document.getElementById('prof-username').value.trim();
+  const fullName = document.getElementById('prof-fullname').value.trim();
+  const phone = document.getElementById('prof-phone').value.trim();
+  const birthday = document.getElementById('prof-birthday').value || null;
+  const gender = document.querySelector('input[name="prof-gender"]:checked')?.value || 'Male';
+
+  const updates = {
+    username,
+    full_name: fullName,
+    phone,
+    gender,
+    birthday,
+    avatar_url: tempProfileAvatarUrl || null
+  };
+
+  const { data, error } = await supabaseClient
+    .from('profiles')
+    .update(updates)
+    .eq('id', state.currentUser.id)
+    .select()
+    .single();
+
+  if (error) return showToast(error.message, 'error');
+  state.currentProfile = { ...state.currentProfile, ...data };
+  updateAuthUI();
+  populateAccountProfileForm();
+  showToast('My Profile saved successfully!');
+}
+
+export async function saveUserDefaultAddress(e) {
+  e.preventDefault();
+  if (!supabaseClient || !state.currentUser) return;
+
+  const updates = {
+    phone: document.getElementById('prof-phone').value.trim(),
+    default_barangay: document.getElementById('prof-default-barangay').value.trim(),
+    default_address: document.getElementById('prof-default-address').value.trim()
+  };
+
+  const { data, error } = await supabaseClient
+    .from('profiles')
+    .update(updates)
+    .eq('id', state.currentUser.id)
+    .select()
+    .single();
+
+  if (error) return showToast(error.message, 'error');
+  state.currentProfile = { ...state.currentProfile, ...data };
+  showToast('Default delivery address saved!');
+}
+
+export async function changeUserPassword(e) {
+  e.preventDefault();
+  if (!supabaseClient || !state.currentUser) return;
+  const p1 = document.getElementById('acct-new-pass').value;
+  const p2 = document.getElementById('acct-confirm-pass').value;
+  if (p1.length < 6) return showToast('Password must be at least 6 characters.', 'warning');
+  if (p1 !== p2) return showToast('Passwords do not match.', 'error');
+
+  const { error } = await supabaseClient.auth.updateUser({ password: p1 });
+  if (error) return showToast(error.message, 'error');
+  document.getElementById('acct-new-pass').value = '';
+  document.getElementById('acct-confirm-pass').value = '';
+  showToast('Password updated successfully!');
+}
+
+export async function loadAvailableVouchersWallet() {
+  const grid = document.getElementById('acct-vouchers-grid');
+  if (!grid || !supabaseClient) return;
+
+  const { data, error } = await supabaseClient
+    .from('vouchers')
+    .select('*')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    grid.innerHTML = `<div class="empty-state">Could not load vouchers right now.</div>`;
+    return;
+  }
+
+  const now = new Date();
+  const active = (data || []).filter(v => {
+    if (v.expires_at && new Date(v.expires_at) < now) return false;
+    if (Number(v.used_count || 0) >= Number(v.usage_limit || 0)) return false;
+    return true;
+  });
+
+  if (!active.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">No active shop vouchers available right now. Check back soon!</div>`;
+    return;
+  }
+
+  grid.innerHTML = active.map(v => {
+    const discLabel = v.discount_type === 'percent'
+      ? `${Number(v.discount_value)}% OFF`
+      : `${formatPeso(v.discount_value)} OFF`;
+    const leftCount = Math.max(0, Number(v.usage_limit || 0) - Number(v.used_count || 0));
+
+    return `
+      <div style="border:1.5px dashed #16a34a;background:linear-gradient(135deg,#f0fdf4,#ffffff);border-radius:10px;padding:0.9rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:0.75rem;">
+        <div>
+          <span class="badge seller" style="margin-bottom:0.3rem;display:inline-block;">🏪 ${escapeHtml(v.shop_name)}</span>
+          <div style="font-size:1.15rem;font-weight:800;color:var(--primary-dark);">${discLabel}</div>
+          <div style="font-size:0.76rem;color:var(--text-secondary);margin-top:0.15rem;">
+            Min. Spend: <strong>${formatPeso(v.min_spend)}</strong> • ${leftCount} left
+          </div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem;">
+            Code: <strong style="color:var(--primary-deep);letter-spacing:0.04em;">${escapeHtml(v.code)}</strong>
+            ${v.expires_at ? ` • Valid until ${new Date(v.expires_at).toLocaleDateString()}` : ''}
+          </div>
+        </div>
+        <button type="button" class="shop-cta sm" onclick="copyVoucherCode('${escapeHtml(v.code)}')">📋 Copy Code</button>
+      </div>
+    `;
+  }).join('');
+}
+
+export function copyVoucherCode(code) {
+  navigator.clipboard?.writeText(code).catch(() => {});
+  showToast(`Voucher code "${code}" copied! Paste it at Cart Checkout.`);
+}
 
 export async function loadBuyerOrders() {
   if (!supabaseClient || !state.currentUser) return;
+  populateAccountProfileForm();
   const { data, error } = await supabaseClient
     .from('orders')
     .select('*')
@@ -208,6 +412,13 @@ export function closeReceiptModal() {
 }
 
 Object.assign(window, {
+  openAccountTab,
+  handleProfileAvatarUpload,
+  saveUserProfile,
+  saveUserDefaultAddress,
+  changeUserPassword,
+  loadAvailableVouchersWallet,
+  copyVoucherCode,
   cancelBuyerOrder,
   openReviewModal,
   closeReviewModal,
