@@ -16,8 +16,38 @@ function getCartStorageKey() {
 
 export function loadCartForCurrentUser() {
   try {
-    const raw = localStorage.getItem(getCartStorageKey());
-    state.cart = raw ? JSON.parse(raw) : [];
+    if (state.currentUser?.id) {
+      const userKey = `markethub_cart_${state.currentUser.id}`;
+
+      // Auto-migrate legacy 'markethub_cart' key kung meron pa
+      const legacyRaw = localStorage.getItem('markethub_cart');
+      if (legacyRaw) {
+        localStorage.setItem(userKey, legacyRaw);
+        localStorage.removeItem('markethub_cart');
+      }
+
+      const savedUserCart = JSON.parse(localStorage.getItem(userKey) || '[]');
+      const guestCart = JSON.parse(localStorage.getItem('markethub_cart_guest') || '[]');
+
+      if (guestCart.length > 0) {
+        guestCart.forEach(gItem => {
+          if (gItem.seller_id === state.currentUser.id) return;
+          const existing = savedUserCart.find(u => String(u.product_id) === String(gItem.product_id));
+          if (existing) {
+            existing.qty += Number(gItem.qty || 1);
+          } else {
+            savedUserCart.push(gItem);
+          }
+        });
+        localStorage.removeItem('markethub_cart_guest');
+        localStorage.setItem(userKey, JSON.stringify(savedUserCart));
+      }
+
+      state.cart = savedUserCart;
+    } else {
+      localStorage.removeItem('markethub_cart');
+      state.cart = JSON.parse(localStorage.getItem('markethub_cart_guest') || '[]');
+    }
   } catch {
     state.cart = [];
   }
@@ -28,6 +58,7 @@ export function saveCartToStorage() {
   localStorage.setItem(getCartStorageKey(), JSON.stringify(state.cart));
   updateCartBadge();
 }
+
 export function updateCartBadge() {
   const totalQty = state.cart.reduce((sum, item) => sum + Number(item.qty || 1), 0);
   const badge = document.getElementById('cart-count');
@@ -617,6 +648,7 @@ export function recalculateCartCheckoutTotals() {
 }
 
 Object.assign(window, {
+  loadCartForCurrentUser,
   addToCartById,
   addFromPdpToCart,
   quickBuyNowById,
