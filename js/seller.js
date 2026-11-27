@@ -1,5 +1,5 @@
 // =========================================================
-// SELLER APPLICATION, SELLER CENTRE (5 TABS) & INCOME ANALYTICS
+// SELLER APPLICATION, SELLER CENTRE (6 TABS), VOUCHERS & INCOME ANALYTICS
 // =========================================================
 import { supabaseClient, COMMISSION_RATE, CATEGORIES, state } from './config.js';
 import {
@@ -98,11 +98,12 @@ export async function submitSellerApplication(e) {
 }
 
 export function switchSellerTab(tab) {
-  ['home', 'my-products', 'products', 'income', 'shipping'].forEach(t => {
+  ['home', 'my-products', 'products', 'vouchers', 'income', 'shipping'].forEach(t => {
     document.getElementById(`seller-tab-${t}`)?.classList.toggle('hidden', t !== tab);
     document.getElementById(`seller-nav-${t}`)?.classList.toggle('active', t === tab);
   });
   if (tab === 'my-products') renderSellerProductsTable();
+  if (tab === 'vouchers') loadSellerVouchers();
   if (tab === 'income') renderSellerIncomeAnalytics();
 }
 
@@ -139,6 +140,7 @@ export async function loadSellerDashboard() {
   renderSellerOrders();
   renderSellerProductsTable();
   renderSellerIncomeAnalytics();
+  await loadSellerVouchers();
 }
 
 export function renderSellerOrders() {
@@ -219,6 +221,113 @@ export async function updateSellerOrderStatus(orderId, newStatus) {
   if (error) return showToast(error.message, 'error');
   showToast(`Order marked as ${newStatus}.`);
   await loadSellerDashboard();
+}
+
+// =========================================================
+// SELLER SHOP VOUCHER GENERATOR
+// =========================================================
+export function generateRandomVoucherCode() {
+  const prefix = (state.currentSellerRecord?.shop_name || 'SHOP')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, 5) || 'SAVE';
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const input = document.getElementById('voucher-code-input');
+  if (input) input.value = `${prefix}${rand}`;
+}
+
+export async function loadSellerVouchers() {
+  const tbody = document.getElementById('seller-vouchers-tbody');
+  if (!tbody || !supabaseClient || !state.currentUser) return;
+
+  const { data, error } = await supabaseClient
+    .from('vouchers')
+    .select('*')
+    .eq('seller_id', state.currentUser.id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);">Run the SQL setup first to enable vouchers.</td></tr>`;
+    return;
+  }
+
+  const list = data || [];
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.25rem;">No shop vouchers created yet. Create one above to attract more buyers!</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(v => {
+    const discLabel = v.discount_type === 'percent'
+      ? `${Number(v.discount_value)}% OFF`
+      : `${formatPeso(v.discount_value)} OFF`;
+    return `
+      <tr>
+        <td><strong style="color:var(--primary-deep);letter-spacing:0.04em;">${escapeHtml(v.code)}</strong></td>
+        <td><span class="badge seller">${discLabel}</span></td>
+        <td>${formatPeso(v.min_spend)}</td>
+        <td><strong>${v.used_count || 0}</strong> / ${v.usage_limit}</td>
+        <td>${v.expires_at ? new Date(v.expires_at).toLocaleDateString() : 'No Expiry'}</td>
+        <td>
+          <div style="display:flex;gap:0.35rem;">
+            <button type="button" class="sm ${v.is_active ? 'success-btn' : 'secondary'}" onclick="toggleSellerVoucher('${escapeHtml(v.id)}', ${!v.is_active})">
+              ${v.is_active ? 'Active' : 'Paused'}
+            </button>
+            <button type="button" class="danger-outline sm" onclick="deleteSellerVoucher('${escapeHtml(v.id)}')">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+export async function createSellerVoucher(e) {
+  e.preventDefault();
+  if (!supabaseClient || !state.currentUser) return;
+
+  const code = document.getElementById('voucher-code-input').value.trim().toUpperCase().replace(/\s+/g, '');
+  const discountType = document.getElementById('voucher-type-select').value;
+  const discountValue = Number(document.getElementById('voucher-value-input').value || 0);
+  const minSpend = Number(document.getElementById('voucher-min-spend').value || 0);
+  const usageLimit = parseInt(document.getElementById('voucher-usage-limit').value, 10) || 50;
+  const expiryDate = document.getElementById('voucher-expiry-date').value;
+
+  if (!code || discountValue <= 0) return showToast('Enter a valid code and discount amount.', 'warning');
+  if (discountType === 'percent' && discountValue > 90) return showToast('Percentage discount cannot exceed 90%.', 'warning');
+
+  const payload = {
+    seller_id: state.currentUser.id,
+    shop_name: state.currentSellerRecord?.shop_name || 'Verified Shop',
+    code,
+    discount_type: discountType,
+    discount_value: discountValue,
+    min_spend: minSpend,
+    usage_limit: usageLimit,
+    expires_at: expiryDate ? new Date(`${expiryDate}T23:59:59`).toISOString() : null,
+    is_active: true
+  };
+
+  const { error } = await supabaseClient.from('vouchers').insert(payload);
+  if (error) return showToast(error.message.includes('duplicate') ? 'Voucher code already exists. Generate another code.' : error.message, 'error');
+
+  e.target.reset();
+  showToast(`Shop voucher "${code}" published!`);
+  await loadSellerVouchers();
+}
+
+export async function toggleSellerVoucher(id, nextState) {
+  const { error } = await supabaseClient.from('vouchers').update({ is_active: nextState }).eq('id', id);
+  if (error) return showToast(error.message, 'error');
+  showToast(nextState ? 'Voucher activated!' : 'Voucher paused.');
+  await loadSellerVouchers();
+}
+
+export async function deleteSellerVoucher(id) {
+  if (!confirm('Delete this shop voucher permanently?')) return;
+  const { error } = await supabaseClient.from('vouchers').delete().eq('id', id);
+  if (error) return showToast(error.message, 'error');
+  showToast('Voucher deleted.');
+  await loadSellerVouchers();
 }
 
 // =========================================================
@@ -988,6 +1097,11 @@ Object.assign(window, {
   renderSellerOrders,
   verifyQrPayment,
   updateSellerOrderStatus,
+  generateRandomVoucherCode,
+  loadSellerVouchers,
+  createSellerVoucher,
+  toggleSellerVoucher,
+  deleteSellerVoucher,
   handleIncomePeriodChange,
   setIncomeGroupMode,
   renderSellerIncomeAnalytics,
