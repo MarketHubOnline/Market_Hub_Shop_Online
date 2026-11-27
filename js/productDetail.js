@@ -14,7 +14,7 @@ export function openExpandedProduct(productId) {
   state.reviewStarFilter = 'all';
 
   const seller = state.allSellers.find(s => s.user_id === prod.seller_id);
-  const shopName = prod.shop_name || seller?.shop_name || 'Verified Seller';
+  const shopName = seller?.shop_name || prod.shop_name || 'Verified Seller';
   const imgs = getProductImages(prod);
   const stockNum = Number(prod.stock ?? 99);
   const outOfStock = stockNum <= 0;
@@ -145,7 +145,7 @@ export function openChatFromPdp() {
   const seller = state.allSellers.find(s => s.user_id === state.activePdpProduct.seller_id);
   openDirectChat(
     state.activePdpProduct.seller_id,
-    state.activePdpProduct.shop_name || seller?.shop_name || 'Seller',
+    seller?.shop_name || state.activePdpProduct.shop_name || 'Seller',
     state.activePdpProduct.title
   );
 }
