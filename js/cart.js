@@ -1,5 +1,5 @@
 // =========================================================
-// SHOPPING CART, AUTO-DETECT VOUCHERS (DISCOUNT + FREE SHIP) & SHIPPING CALCULATOR
+// SHOPPING CART, SHOPEE-STYLE GROUPED CHECKOUT & AUTO-VOUCHERS
 // =========================================================
 import { supabaseClient, state, PLACEHOLDER_IMG } from './config.js';
 import { escapeHtml, formatPeso, getProductImages, showToast } from './utils.js';
@@ -75,6 +75,7 @@ export function buyNowFromPdp() {
 
 export async function openCartModal() {
   populateBarangaySuggestions();
+  syncCheckoutAddressFromProfile();
   document.getElementById('cart-modal').classList.remove('hidden');
   await fetchActiveVouchersForCartSellers();
   renderCartModal();
@@ -86,6 +87,7 @@ export function closeCartModal() {
 
 export function populateBarangaySuggestions() {
   const datalist = document.getElementById('barangay-suggestions');
+  if (!datalist) return;
   const seen = new Set();
   state.allSellers.forEach(s => {
     if (Array.isArray(s.barangay_rates)) {
@@ -93,6 +95,92 @@ export function populateBarangaySuggestions() {
     }
   });
   datalist.innerHTML = Array.from(seen).map(name => `<option value="${escapeHtml(name)}">`).join('');
+}
+
+export function syncCheckoutAddressFromProfile() {
+  const nEl = document.getElementById('checkout-name');
+  const pEl = document.getElementById('checkout-phone');
+  const bEl = document.getElementById('checkout-barangay');
+  const aEl = document.getElementById('checkout-address');
+
+  if (state.currentProfile) {
+    if (nEl && !nEl.value && state.currentProfile.full_name) nEl.value = state.currentProfile.full_name;
+    if (pEl && !pEl.value && state.currentProfile.phone) pEl.value = state.currentProfile.phone;
+    if (bEl && !bEl.value && state.currentProfile.default_barangay) bEl.value = state.currentProfile.default_barangay;
+    if (aEl && !aEl.value && state.currentProfile.default_address) aEl.value = state.currentProfile.default_address;
+  }
+
+  refreshCheckoutAddressCard();
+}
+
+export function refreshCheckoutAddressCard() {
+  const nameVal = document.getElementById('checkout-name')?.value.trim() || '';
+  const phoneVal = document.getElementById('checkout-phone')?.value.trim() || '';
+  const brgyVal = document.getElementById('checkout-barangay')?.value.trim() || '';
+  const addrVal = document.getElementById('checkout-address')?.value.trim() || '';
+
+  const dispRow = document.getElementById('checkout-address-display');
+  const editBox = document.getElementById('checkout-address-edit-box');
+  const namePhoneEl = document.getElementById('disp-checkout-name-phone');
+  const fullAddrEl = document.getElementById('disp-checkout-full-address');
+
+  const isComplete = Boolean(nameVal && phoneVal && brgyVal && addrVal);
+
+  if (isComplete) {
+    if (namePhoneEl) namePhoneEl.textContent = `${nameVal} (${phoneVal})`;
+    if (fullAddrEl) fullAddrEl.textContent = `${brgyVal}, ${addrVal}`;
+    dispRow?.classList.remove('hidden');
+    editBox?.classList.add('hidden');
+  } else {
+    dispRow?.classList.add('hidden');
+    editBox?.classList.remove('hidden');
+  }
+}
+
+export function toggleCheckoutAddressEdit(showEdit) {
+  const dispRow = document.getElementById('checkout-address-display');
+  const editBox = document.getElementById('checkout-address-edit-box');
+  if (showEdit) {
+    dispRow?.classList.add('hidden');
+    editBox?.classList.remove('hidden');
+  } else {
+    refreshCheckoutAddressCard();
+    recalculateCartCheckoutTotals();
+  }
+}
+
+export async function saveCheckoutAddressToProfile() {
+  const nameVal = document.getElementById('checkout-name')?.value.trim() || '';
+  const phoneVal = document.getElementById('checkout-phone')?.value.trim() || '';
+  const brgyVal = document.getElementById('checkout-barangay')?.value.trim() || '';
+  const addrVal = document.getElementById('checkout-address')?.value.trim() || '';
+
+  if (!nameVal || !phoneVal || !brgyVal || !addrVal) {
+    return showToast('Please fill in Name, Phone, Barangay, and Address.', 'warning');
+  }
+
+  if (supabaseClient && state.currentUser) {
+    const { error } = await supabaseClient
+      .from('profiles')
+      .update({
+        full_name: nameVal,
+        phone: phoneVal,
+        default_barangay: brgyVal,
+        default_address: addrVal
+      })
+      .eq('id', state.currentUser.id);
+
+    if (!error && state.currentProfile) {
+      state.currentProfile.full_name = nameVal;
+      state.currentProfile.phone = phoneVal;
+      state.currentProfile.default_barangay = brgyVal;
+      state.currentProfile.default_address = addrVal;
+    }
+  }
+
+  refreshCheckoutAddressCard();
+  recalculateCartCheckoutTotals();
+  showToast('Delivery address updated!');
 }
 
 async function fetchActiveVouchersForCartSellers() {
@@ -114,7 +202,6 @@ async function fetchActiveVouchersForCartSellers() {
       .eq('is_active', true);
 
     if (error) {
-      console.warn('Voucher fetch warning:', error.message);
       cartActiveVouchers = [];
       return;
     }
@@ -126,7 +213,6 @@ async function fetchActiveVouchersForCartSellers() {
       return notExpired && hasStock;
     });
   } catch (err) {
-    console.error(err);
     cartActiveVouchers = [];
   }
 }
@@ -152,23 +238,8 @@ function formatVoucherBadgeLabel(v) {
   return `💵 ${formatPeso(v.discount_value)} OFF`;
 }
 
-function ensureAutoVoucherContainer() {
-  let box = document.getElementById('auto-detected-vouchers-box');
-  if (!box) {
-    const codeInput = document.getElementById('checkout-voucher-code');
-    const wrapper = codeInput?.closest('div')?.parentElement;
-    if (wrapper) {
-      box = document.createElement('div');
-      box.id = 'auto-detected-vouchers-box';
-      box.style.marginBottom = '0.6rem';
-      wrapper.insertBefore(box, wrapper.firstChild);
-    }
-  }
-  return box;
-}
-
 export function renderAutoDetectedVouchers() {
-  const box = ensureAutoVoucherContainer();
+  const box = document.getElementById('auto-detected-vouchers-box');
   if (!box) return;
 
   if (!cartActiveVouchers.length) {
@@ -178,7 +249,7 @@ export function renderAutoDetectedVouchers() {
 
   const sellerSubtotals = getSellerSubtotalsMap();
 
-  const chipsHtml = cartActiveVouchers.map(v => {
+  box.innerHTML = cartActiveVouchers.map(v => {
     const shopSub = sellerSubtotals[v.seller_id] || 0;
     const minSpend = Number(v.min_spend || 0);
     const isEligible = shopSub >= minSpend;
@@ -191,29 +262,29 @@ export function renderAutoDetectedVouchers() {
     if (isEligible) {
       return `
         <div onclick="selectAutoVoucher('${escapeHtml(v.id)}')"
-          style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.55rem 0.75rem;margin-bottom:0.4rem;border-radius:8px;cursor:pointer;border:1.5px solid ${isApplied ? '#15803d' : (isFreeShipVoucher ? '#0284c7' : '#4ade80')};background:${isApplied ? '#dcfce7' : '#ffffff'};transition:all 0.15s;">
+          style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;margin-bottom:0.4rem;border-radius:6px;cursor:pointer;border:1.5px solid ${isApplied ? '#15803d' : (isFreeShipVoucher ? '#0284c7' : '#86efac')};background:${isApplied ? '#dcfce7' : '#f0fdf4'};">
           <div style="min-width:0;">
             <div style="font-size:0.78rem;font-weight:800;color:${isFreeShipVoucher ? '#0369a1' : 'var(--primary-deep)'};">
               ${escapeHtml(v.code)} — <span>${discLabel}</span>
             </div>
-            <div style="font-size:0.71rem;color:var(--text-secondary);">
-              🏪 ${escapeHtml(shopName)} • Min. spend ${formatPeso(minSpend)} (Unlocked!)
+            <div style="font-size:0.7rem;color:var(--text-secondary);">
+              🏪 ${escapeHtml(shopName)} • Min. spend ${formatPeso(minSpend)}
             </div>
           </div>
           <button type="button" class="sm ${isApplied ? 'success-btn' : 'shop-cta'}" style="flex-shrink:0;">
-            ${isApplied ? '✓ Applied' : 'Click to Apply'}
+            ${isApplied ? '✓ Applied' : 'Apply'}
           </button>
         </div>
       `;
     } else {
       return `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;margin-bottom:0.4rem;border-radius:8px;border:1px dashed #cbd5e1;background:#f8fafc;opacity:0.85;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.45rem 0.75rem;margin-bottom:0.4rem;border-radius:6px;border:1px dashed #cbd5e1;background:#f8fafc;opacity:0.85;">
           <div style="min-width:0;">
-            <div style="font-size:0.76rem;font-weight:700;color:#475569;">
+            <div style="font-size:0.75rem;font-weight:700;color:#475569;">
               🔒 ${escapeHtml(v.code)} — ${discLabel} (${escapeHtml(shopName)})
             </div>
-            <div style="font-size:0.7rem;color:#b45309;font-weight:600;">
-              Add ${formatPeso(missingAmt)} more from this shop to unlock (Min. ${formatPeso(minSpend)})
+            <div style="font-size:0.69rem;color:#b45309;font-weight:600;">
+              Add ${formatPeso(missingAmt)} more to unlock (Min. ${formatPeso(minSpend)})
             </div>
           </div>
           <span class="badge" style="font-size:0.65rem;flex-shrink:0;">Locked</span>
@@ -221,13 +292,6 @@ export function renderAutoDetectedVouchers() {
       `;
     }
   }).join('');
-
-  box.innerHTML = `
-    <div style="font-size:0.74rem;font-weight:800;color:var(--primary-deep);margin-bottom:0.35rem;text-transform:uppercase;letter-spacing:0.03em;">
-      ✨ Available Shop Offers &amp; Vouchers (1-Click Apply)
-    </div>
-    ${chipsHtml}
-  `;
 }
 
 export function selectAutoVoucher(voucherId) {
@@ -336,39 +400,96 @@ export async function applyCheckoutVoucher() {
 export function renderCartModal() {
   const container = document.getElementById('cart-items-container');
   const checkoutSec = document.getElementById('checkout-section');
+  const emptyBox = document.getElementById('cart-empty-box');
 
   if (!state.cart.length) {
     appliedVoucherObj = null;
     state.appliedCheckoutVoucher = null;
-    container.innerHTML = `<div class="empty-state">Your shopping cart is empty. Browse fresh harvests &amp; gadgets!</div>`;
-    checkoutSec.classList.add('hidden');
+    emptyBox?.classList.remove('hidden');
+    checkoutSec?.classList.add('hidden');
+    if (container) container.innerHTML = '';
     return;
   }
 
-  checkoutSec.classList.remove('hidden');
-  if (state.currentProfile?.full_name && !document.getElementById('checkout-name').value) {
-    document.getElementById('checkout-name').value = state.currentProfile.full_name;
-  }
+  emptyBox?.classList.add('hidden');
+  checkoutSec?.classList.remove('hidden');
+  syncCheckoutAddressFromProfile();
 
-  container.innerHTML = state.cart.map((item, idx) => {
-    const isFree = item.is_free_shipping === true;
-    const displayShopName = state.allSellers.find(s => s.user_id === item.seller_id)?.shop_name || item.shop_name || 'Verified Shop';
-    return `
-      <div style="display:flex;align-items:center;gap:0.75rem;padding:0.65rem 0;border-bottom:1px solid var(--border);">
-        <img src="${escapeHtml(item.image_url || PLACEHOLDER_IMG)}" alt="" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);" />
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:0.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.title)}</div>
-          <div style="font-size:0.74rem;color:var(--primary-dark);font-weight:600;">
-            🏪 ${escapeHtml(displayShopName)}
-            ${isFree ? '<span class="badge ship-free" style="margin-left:0.35rem;font-size:0.65rem;">🚚 Free Shipping</span>' : ''}
+  const brgy = document.getElementById('checkout-barangay')?.value || '';
+  const grouped = {};
+  state.cart.forEach((item, globalIdx) => {
+    (grouped[item.seller_id] ||= []).push({ ...item, globalIdx });
+  });
+
+  container.innerHTML = Object.entries(grouped).map(([sid, items]) => {
+    const seller = state.allSellers.find(s => s.user_id === sid);
+    const shopName = seller?.shop_name || items[0]?.shop_name || 'Verified Shop';
+    const shopShipFee = computeShippingForSellerGroup(sid, items, brgy);
+    const shopItemsSub = items.reduce((s, i) => s + Number(i.price) * Number(i.qty), 0);
+    const shopOrderTotal = shopItemsSub + shopShipFee;
+    const totalShopQty = items.reduce((s, i) => s + Number(i.qty), 0);
+
+    const rowsHtml = items.map(it => {
+      const isFree = it.is_free_shipping === true;
+      const lineSub = Number(it.price) * Number(it.qty);
+      return `
+        <div style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 0;border-bottom:1px solid #f1f5f9;">
+          <img src="${escapeHtml(it.image_url || PLACEHOLDER_IMG)}" alt="" style="width:54px;height:54px;object-fit:cover;border-radius:6px;border:1px solid var(--border);flex-shrink:0;" />
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:0.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(it.title)}</div>
+            <div style="font-size:0.74rem;color:var(--muted);margin-top:0.15rem;">
+              Unit Price: <strong>${formatPeso(it.price)}</strong>
+              ${isFree ? '<span class="badge ship-free" style="margin-left:0.35rem;font-size:0.65rem;">🚚 Free Shipping</span>' : ''}
+            </div>
           </div>
-          <div style="font-size:0.82rem;font-weight:700;margin-top:0.15rem;">${formatPeso(item.price)} × ${item.qty}</div>
+
+          <div style="display:flex;align-items:center;gap:0.3rem;">
+            <button type="button" class="secondary sm" style="padding:0.18rem 0.45rem;" onclick="updateCartItemQty(${it.globalIdx}, -1)">−</button>
+            <span style="font-weight:700;font-size:0.84rem;min-width:20px;text-align:center;">${it.qty}</span>
+            <button type="button" class="secondary sm" style="padding:0.18rem 0.45rem;" onclick="updateCartItemQty(${it.globalIdx}, 1)">+</button>
+          </div>
+
+          <div style="text-align:right;min-width:85px;">
+            <div style="font-weight:800;font-size:0.88rem;color:var(--text);">${formatPeso(lineSub)}</div>
+            <button type="button" class="text-link-btn" style="font-size:0.7rem;color:var(--danger);text-decoration:none;" onclick="removeCartItem(${it.globalIdx})">Remove</button>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:0.35rem;">
-          <button class="secondary sm" onclick="updateCartItemQty(${idx}, -1)">−</button>
-          <span style="font-weight:700;min-width:20px;text-align:center;">${item.qty}</span>
-          <button class="secondary sm" onclick="updateCartItemQty(${idx}, 1)">+</button>
-          <button class="danger-outline sm" onclick="removeCartItem(${idx})">✕</button>
+      `;
+    }).join('');
+
+    return `
+      <div style="background:#ffffff;border-radius:8px;padding:0.95rem 1.15rem;margin-bottom:0.75rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+        <!-- Shop Header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:0.55rem;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span class="pdp-mall-pill" style="font-size:0.65rem;">VERIFIED</span>
+            <strong style="font-size:0.88rem;color:var(--text);">🏪 ${escapeHtml(shopName)}</strong>
+          </div>
+          <button type="button" class="text-link-btn" style="font-size:0.76rem;text-decoration:none;" onclick="openDirectChat('${escapeHtml(sid)}', '${escapeHtml(shopName)}')">💬 Chat Now</button>
+        </div>
+
+        <!-- Shop Items -->
+        <div>${rowsHtml}</div>
+
+        <!-- Message for Seller + Shipping Option Row (Shopee Style) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.85rem;padding:0.75rem 0;border-bottom:1px dashed var(--border);align-items:center;">
+          <div style="display:flex;align-items:center;gap:0.45rem;">
+            <span style="font-size:0.78rem;color:var(--text-secondary);white-space:nowrap;">Message:</span>
+            <input type="text" class="shop-order-note-input" data-seller-id="${escapeHtml(sid)}" placeholder="Please leave a message..." style="font-size:0.78rem;padding:0.36rem 0.55rem;" />
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.8rem;">
+            <div>
+              <span style="color:var(--primary-dark);font-weight:700;">🚚 Standard Local Delivery</span>
+              <div style="font-size:0.7rem;color:var(--muted);">${brgy ? `To ${escapeHtml(brgy)}` : 'Barangay / Item rate'}</div>
+            </div>
+            <strong style="color:var(--text);">${shopShipFee === 0 ? '₱0.00 (FREE)' : formatPeso(shopShipFee)}</strong>
+          </div>
+        </div>
+
+        <!-- Shop Order Total -->
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:0.65rem;padding-top:0.65rem;font-size:0.84rem;">
+          <span style="color:var(--muted);">Order Total (${totalShopQty} item${totalShopQty > 1 ? 's' : ''}):</span>
+          <strong style="font-size:1rem;color:var(--primary-dark);">${formatPeso(shopOrderTotal)}</strong>
         </div>
       </div>
     `;
@@ -487,6 +608,8 @@ Object.assign(window, {
   buyNowFromPdp,
   openCartModal,
   closeCartModal,
+  toggleCheckoutAddressEdit,
+  saveCheckoutAddressToProfile,
   updateCartItemQty,
   removeCartItem,
   selectAutoVoucher,
