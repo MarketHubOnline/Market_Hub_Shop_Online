@@ -1,9 +1,12 @@
 // =========================================================
-// SHOPPING CART & BARANGAY SHIPPING FEE CALCULATOR
+// SHOPPING CART, AUTO-DETECT VOUCHERS & BARANGAY SHIPPING FEE CALCULATOR
 // =========================================================
-import { state, PLACEHOLDER_IMG } from './config.js';
+import { supabaseClient, state, PLACEHOLDER_IMG } from './config.js';
 import { escapeHtml, formatPeso, getProductImages, showToast } from './utils.js';
 import { renderCheckoutQrSellers } from './checkout.js';
+
+let cartActiveVouchers = [];
+let appliedVoucherObj = null;
 
 export function saveCartToStorage() {
   localStorage.setItem('markethub_cart', JSON.stringify(state.cart));
@@ -70,10 +73,11 @@ export function buyNowFromPdp() {
   openCartModal();
 }
 
-export function openCartModal() {
+export async function openCartModal() {
   populateBarangaySuggestions();
-  renderCartModal();
   document.getElementById('cart-modal').classList.remove('hidden');
+  await fetchActiveVouchersForCartSellers();
+  renderCartModal();
 }
 
 export function closeCartModal() {
@@ -91,11 +95,244 @@ export function populateBarangaySuggestions() {
   datalist.innerHTML = Array.from(seen).map(name => `<option value="${escapeHtml(name)}">`).join('');
 }
 
+async function fetchActiveVouchersForCartSellers() {
+  if (!supabaseClient || !state.cart.length) {
+    cartActiveVouchers = [];
+    return;
+  }
+  const sellerIds = [...new Set(state.cart.map(i => i.seller_id).filter(Boolean))];
+  if (!sellerIds.length) {
+    cartActiveVouchers = [];
+    return;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('vouchers')
+      .select('*')
+      .in('seller_id', sellerIds)
+      .eq('is_active', true);
+
+    if (error) {
+      console.warn('Voucher fetch warning:', error.message);
+      cartActiveVouchers = [];
+      return;
+    }
+
+    const now = new Date();
+    cartActiveVouchers = (data || []).filter(v => {
+      const notExpired = !v.expires_at || new Date(v.expires_at) >= now;
+      const hasStock = Number(v.used_count || 0) < Number(v.usage_limit || 999999);
+      return notExpired && hasStock;
+    });
+  } catch (err) {
+    console.error(err);
+    cartActiveVouchers = [];
+  }
+}
+
+function getSellerSubtotalsMap() {
+  const map = {};
+  state.cart.forEach(item => {
+    const sid = item.seller_id;
+    map[sid] = (map[sid] || 0) + (Number(item.price) * Number(item.qty));
+  });
+  return map;
+}
+
+function computeVoucherDiscountAmount(voucher, sellerSubtotal) {
+  if (!voucher || sellerSubtotal < Number(voucher.min_spend || 0)) return 0;
+  if (voucher.discount_type === 'percent') {
+    return Math.min(sellerSubtotal, sellerSubtotal * (Number(voucher.discount_value || 0) / 100));
+  }
+  return Math.min(sellerSubtotal, Number(voucher.discount_value || 0));
+}
+
+function ensureAutoVoucherContainer() {
+  let box = document.getElementById('auto-detected-vouchers-box');
+  if (!box) {
+    const codeInput = document.getElementById('checkout-voucher-code');
+    const wrapper = codeInput?.closest('div')?.parentElement;
+    if (wrapper) {
+      box = document.createElement('div');
+      box.id = 'auto-detected-vouchers-box';
+      box.style.marginBottom = '0.6rem';
+      wrapper.insertBefore(box, wrapper.firstChild);
+    }
+  }
+  return box;
+}
+
+export function renderAutoDetectedVouchers() {
+  const box = ensureAutoVoucherContainer();
+  if (!box) return;
+
+  if (!cartActiveVouchers.length) {
+    box.innerHTML = '';
+    return;
+  }
+
+  const sellerSubtotals = getSellerSubtotalsMap();
+
+  const chipsHtml = cartActiveVouchers.map(v => {
+    const shopSub = sellerSubtotals[v.seller_id] || 0;
+    const minSpend = Number(v.min_spend || 0);
+    const isEligible = shopSub >= minSpend;
+    const isApplied = appliedVoucherObj && String(appliedVoucherObj.id) === String(v.id);
+    const shopName = state.allSellers.find(s => s.user_id === v.seller_id)?.shop_name || v.shop_name || 'Shop';
+    const discLabel = v.discount_type === 'percent'
+      ? `${Number(v.discount_value)}% OFF`
+      : `${formatPeso(v.discount_value)} OFF`;
+    const missingAmt = Math.max(0, minSpend - shopSub);
+
+    if (isEligible) {
+      return `
+        <div onclick="selectAutoVoucher('${escapeHtml(v.id)}')"
+          style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.55rem 0.75rem;margin-bottom:0.4rem;border-radius:8px;cursor:pointer;border:1.5px solid ${isApplied ? '#15803d' : '#4ade80'};background:${isApplied ? '#dcfce7' : '#ffffff'};transition:all 0.15s;">
+          <div style="min-width:0;">
+            <div style="font-size:0.78rem;font-weight:800;color:var(--primary-deep);">
+              🎟️ ${escapeHtml(v.code)} — <span style="color:#15803d;">${discLabel}</span>
+            </div>
+            <div style="font-size:0.71rem;color:var(--text-secondary);">
+              🏪 ${escapeHtml(shopName)} • Min. spend ${formatPeso(minSpend)} (Unlocked!)
+            </div>
+          </div>
+          <button type="button" class="sm ${isApplied ? 'success-btn' : 'shop-cta'}" style="flex-shrink:0;">
+            ${isApplied ? '✓ Applied' : 'Click to Apply'}
+          </button>
+        </div>
+      `;
+    } else {
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;margin-bottom:0.4rem;border-radius:8px;border:1px dashed #cbd5e1;background:#f8fafc;opacity:0.85;">
+          <div style="min-width:0;">
+            <div style="font-size:0.76rem;font-weight:700;color:#475569;">
+              🔒 ${escapeHtml(v.code)} — ${discLabel} (${escapeHtml(shopName)})
+            </div>
+            <div style="font-size:0.7rem;color:#b45309;font-weight:600;">
+              Add ${formatPeso(missingAmt)} more from this shop to unlock (Min. ${formatPeso(minSpend)})
+            </div>
+          </div>
+          <span class="badge" style="font-size:0.65rem;flex-shrink:0;">Locked</span>
+        </div>
+      `;
+    }
+  }).join('');
+
+  box.innerHTML = `
+    <div style="font-size:0.74rem;font-weight:800;color:var(--primary-deep);margin-bottom:0.35rem;text-transform:uppercase;letter-spacing:0.03em;">
+      ✨ Available Shop Vouchers (1-Click Apply)
+    </div>
+    ${chipsHtml}
+  `;
+}
+
+export function selectAutoVoucher(voucherId) {
+  const v = cartActiveVouchers.find(item => String(item.id) === String(voucherId));
+  if (!v) return;
+
+  const sellerSubtotals = getSellerSubtotalsMap();
+  const shopSub = sellerSubtotals[v.seller_id] || 0;
+  if (shopSub < Number(v.min_spend || 0)) {
+    return showToast(`Minimum spend of ${formatPeso(v.min_spend)} required for this shop.`, 'warning');
+  }
+
+  // Toggle off if already selected
+  if (appliedVoucherObj && String(appliedVoucherObj.id) === String(v.id)) {
+    appliedVoucherObj = null;
+    const codeInput = document.getElementById('checkout-voucher-code');
+    if (codeInput) codeInput.value = '';
+    const msgEl = document.getElementById('checkout-voucher-msg');
+    if (msgEl) msgEl.textContent = '';
+    showToast('Voucher removed.');
+  } else {
+    appliedVoucherObj = v;
+    state.appliedCheckoutVoucher = v;
+    const codeInput = document.getElementById('checkout-voucher-code');
+    if (codeInput) codeInput.value = v.code;
+    const msgEl = document.getElementById('checkout-voucher-msg');
+    if (msgEl) {
+      msgEl.style.color = '#15803d';
+      msgEl.textContent = `✓ Voucher "${v.code}" applied!`;
+    }
+    showToast(`Voucher "${v.code}" applied!`);
+  }
+
+  renderAutoDetectedVouchers();
+  recalculateCartCheckoutTotals();
+}
+
+export async function applyCheckoutVoucher() {
+  const rawCode = (document.getElementById('checkout-voucher-code')?.value || '').trim().toUpperCase();
+  const msgEl = document.getElementById('checkout-voucher-msg');
+  if (!rawCode) {
+    appliedVoucherObj = null;
+    state.appliedCheckoutVoucher = null;
+    if (msgEl) msgEl.textContent = '';
+    renderAutoDetectedVouchers();
+    recalculateCartCheckoutTotals();
+    return;
+  }
+
+  let found = cartActiveVouchers.find(v => v.code.toUpperCase() === rawCode);
+  if (!found && supabaseClient) {
+    const { data } = await supabaseClient
+      .from('vouchers')
+      .select('*')
+      .eq('code', rawCode)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (data) found = data;
+  }
+
+  if (!found) {
+    appliedVoucherObj = null;
+    state.appliedCheckoutVoucher = null;
+    if (msgEl) {
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = 'Invalid or expired voucher code.';
+    }
+    renderAutoDetectedVouchers();
+    recalculateCartCheckoutTotals();
+    return;
+  }
+
+  const sellerSubtotals = getSellerSubtotalsMap();
+  const shopSub = sellerSubtotals[found.seller_id] || 0;
+  if (shopSub <= 0) {
+    if (msgEl) {
+      msgEl.style.color = 'var(--danger)';
+      msgEl.textContent = 'This voucher is only valid for items from its issuing shop.';
+    }
+    return;
+  }
+
+  if (shopSub < Number(found.min_spend || 0)) {
+    if (msgEl) {
+      msgEl.style.color = '#b45309';
+      msgEl.textContent = `Minimum shop spend of ${formatPeso(found.min_spend)} required.`;
+    }
+    return;
+  }
+
+  appliedVoucherObj = found;
+  state.appliedCheckoutVoucher = found;
+  if (msgEl) {
+    msgEl.style.color = '#15803d';
+    msgEl.textContent = `✓ Voucher "${found.code}" applied!`;
+  }
+  renderAutoDetectedVouchers();
+  recalculateCartCheckoutTotals();
+  showToast(`Voucher "${found.code}" applied!`);
+}
+
 export function renderCartModal() {
   const container = document.getElementById('cart-items-container');
   const checkoutSec = document.getElementById('checkout-section');
 
   if (!state.cart.length) {
+    appliedVoucherObj = null;
+    state.appliedCheckoutVoucher = null;
     container.innerHTML = `<div class="empty-state">Your shopping cart is empty. Browse fresh harvests &amp; gadgets!</div>`;
     checkoutSec.classList.add('hidden');
     return;
@@ -131,20 +368,23 @@ export function renderCartModal() {
   }).join('');
 
   renderCheckoutQrSellers();
+  renderAutoDetectedVouchers();
   recalculateCartCheckoutTotals();
 }
 
-export function updateCartItemQty(idx, delta) {
+export async function updateCartItemQty(idx, delta) {
   if (!state.cart[idx]) return;
   state.cart[idx].qty += delta;
   if (state.cart[idx].qty <= 0) state.cart.splice(idx, 1);
   saveCartToStorage();
+  await fetchActiveVouchersForCartSellers();
   renderCartModal();
 }
 
-export function removeCartItem(idx) {
+export async function removeCartItem(idx) {
   state.cart.splice(idx, 1);
   saveCartToStorage();
+  await fetchActiveVouchersForCartSellers();
   renderCartModal();
 }
 
@@ -179,9 +419,38 @@ export function recalculateCartCheckoutTotals() {
     shippingTotal += computeShippingForSellerGroup(sid, items, brgy);
   });
 
+  // Auto-validate applied voucher if quantity dropped below min_spend
+  let discountTotal = 0;
+  const sellerSubtotals = getSellerSubtotalsMap();
+  if (appliedVoucherObj) {
+    const targetShopSub = sellerSubtotals[appliedVoucherObj.seller_id] || 0;
+    if (targetShopSub >= Number(appliedVoucherObj.min_spend || 0) && targetShopSub > 0) {
+      discountTotal = computeVoucherDiscountAmount(appliedVoucherObj, targetShopSub);
+    } else {
+      appliedVoucherObj = null;
+      state.appliedCheckoutVoucher = null;
+      const msgEl = document.getElementById('checkout-voucher-msg');
+      if (msgEl) msgEl.textContent = '';
+      renderAutoDetectedVouchers();
+    }
+  }
+
+  const discountRow = document.getElementById('checkout-discount-row');
+  const discountValEl = document.getElementById('checkout-discount-val');
+  if (discountRow && discountValEl) {
+    if (discountTotal > 0) {
+      discountRow.classList.remove('hidden');
+      discountValEl.textContent = `-${formatPeso(discountTotal)}`;
+    } else {
+      discountRow.classList.add('hidden');
+      discountValEl.textContent = '-₱0.00';
+    }
+  }
+
+  const grandTotal = Math.max(0, subtotal - discountTotal + shippingTotal);
   document.getElementById('checkout-subtotal').textContent = formatPeso(subtotal);
   document.getElementById('checkout-shipping').textContent = formatPeso(shippingTotal);
-  document.getElementById('checkout-grand-total').textContent = formatPeso(subtotal + shippingTotal);
+  document.getElementById('checkout-grand-total').textContent = formatPeso(grandTotal);
 }
 
 Object.assign(window, {
@@ -193,5 +462,7 @@ Object.assign(window, {
   closeCartModal,
   updateCartItemQty,
   removeCartItem,
+  selectAutoVoucher,
+  applyCheckoutVoucher,
   recalculateCartCheckoutTotals
 });
