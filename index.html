@@ -650,10 +650,18 @@
               </div>
               <div>
                 <label class="field-label">Discount Type *</label>
-                <select id="voucher-type-select">
-                  <option value="fixed">💵 Fixed Amount Off (₱)</option>
-                  <option value="percent">🏷️ Percentage Discount (%)</option>
+              <div>
+                <label class="field-label">Voucher / Offer Type *</label>
+                <select id="voucher-type-select" onchange="toggleVoucherValueInput()">
+                  <option value="fixed">💵 Fixed Amount Discount (₱ OFF)</option>
+                  <option value="percent">🏷️ Percentage Discount (% OFF)</option>
+                  <option value="free_shipping">🚚 Free Shipping Voucher (Free Delivery)</option>
                 </select>
+              </div>
+              <div id="voucher-value-wrap">
+                <label class="field-label" id="voucher-value-label">Discount Value (₱ or %) *</label>
+                <input type="number" id="voucher-value-input" step="0.01" min="0" required placeholder="e.g. 50 or 10" />
+              </div>
               </div>
               <div>
                 <label class="field-label">Discount Value (₱ or %) *</label>
