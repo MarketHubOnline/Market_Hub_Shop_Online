@@ -67,7 +67,14 @@ export function openExpandedProduct(productId) {
     ? (shopReviews.reduce((s, r) => s + Number(r.rating || 5), 0) / shopReviews.length).toFixed(1)
     : '5.0';
 
-  document.getElementById('pdp-shop-avatar').textContent = shopName.charAt(0).toUpperCase();
+  const pdpShopAvatarEl = document.getElementById('pdp-shop-avatar');
+  pdpShopAvatarEl.style.overflow = 'hidden';
+  if (seller?.shop_logo) {
+    pdpShopAvatarEl.innerHTML = `<img src="${escapeHtml(seller.shop_logo)}" alt="${escapeHtml(shopName)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" />`;
+  } else {
+    pdpShopAvatarEl.textContent = shopName.charAt(0).toUpperCase();
+  }
+
   document.getElementById('pdp-shop-name').textContent = shopName;
   document.getElementById('pdp-shop-rating-stat').textContent = `${shopAvg} ★`;
   document.getElementById('pdp-shop-products-stat').textContent = shopProducts.length;
