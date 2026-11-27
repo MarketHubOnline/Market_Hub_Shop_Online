@@ -920,3 +920,20 @@
   .card-pure-body { padding: 0.55rem 0.6rem 0.68rem; }
   .pdp-cta-row button { flex: 1; min-width: 110px; padding: 0.72rem 0.55rem; font-size: 0.84rem; }
 }
+.payment-pill-btn {
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.payment-pill-btn.active {
+  border-color: var(--primary-dark);
+  background: #f0fdf4;
+  color: var(--primary-deep);
+  font-weight: 700;
+}
