@@ -1,6 +1,6 @@
 // =========================================================
 // ACCOUNT CENTER (MY PROFILE, VOUCHERS, PURCHASES & RECEIPTS)
-// =========================================================
+// ========================================================
 import { supabaseClient, state } from './config.js';
 import { escapeHtml, formatPeso, uploadCompressedImageToBucket, showToast } from './utils.js';
 import { loadMarketplaceData } from './marketplace.js';
