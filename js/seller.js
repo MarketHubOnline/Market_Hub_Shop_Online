@@ -14,6 +14,61 @@ import { loadMarketplaceData } from './marketplace.js';
 
 export function openSellerApplyModal() {
   if (!state.currentUser) return openAuthModal('signin');
+
+  const banner = document.getElementById('seller-apply-status-banner');
+  const form = document.getElementById('seller-apply-form');
+  const submitBtn = document.getElementById('seller-apply-submit-btn');
+  const rec = state.currentSellerRecord;
+
+  if (banner) {
+    banner.classList.add('hidden');
+    banner.innerHTML = '';
+  }
+  if (form) form.classList.remove('hidden');
+  if (submitBtn) submitBtn.textContent = 'Submit Seller Application';
+
+  if (rec && banner) {
+    if (rec.status === 'rejected') {
+      banner.classList.remove('hidden');
+      banner.style.background = '#fef2f2';
+      banner.style.border = '1px solid #fecaca';
+      banner.style.color = '#991b1b';
+      banner.innerHTML = `
+        <strong>❌ Your Previous Application Was Rejected</strong><br/>
+        Your shop application for <strong>"${escapeHtml(rec.shop_name)}"</strong> was not approved by the admin. You may update your shop details below and submit a new application.
+      `;
+      document.getElementById('apply-shop-name').value = rec.shop_name || '';
+      document.getElementById('apply-shop-phone').value = rec.phone || '';
+      document.getElementById('apply-shop-location').value = rec.location || '';
+      document.getElementById('apply-shop-desc').value = rec.description || '';
+      if (submitBtn) submitBtn.textContent = 'Re-submit Seller Application';
+    } else if (rec.status === 'suspended') {
+      banner.classList.remove('hidden');
+      banner.style.background = '#fffbeb';
+      banner.style.border = '1px solid #fde68a';
+      banner.style.color = '#92400e';
+      banner.innerHTML = `
+        <strong>⏸ Shop Account Suspended</strong><br/>
+        Your shop <strong>"${escapeHtml(rec.shop_name)}"</strong> is currently suspended due to unpaid admission/fees. All your products are hidden from buyers. Please contact the Admin to settle and reactivate your store.
+      `;
+      if (form) form.classList.add('hidden');
+    } else if (rec.status === 'pending') {
+      banner.classList.remove('hidden');
+      banner.style.background = '#f0fdf4';
+      banner.style.border = '1px solid #bbf7d0';
+      banner.style.color = '#166534';
+      banner.innerHTML = `
+        <strong>⏳ Application Under Review</strong><br/>
+        Your application for <strong>"${escapeHtml(rec.shop_name)}"</strong> is currently awaiting admin approval.
+      `;
+      document.getElementById('apply-shop-name').value = rec.shop_name || '';
+      document.getElementById('apply-shop-phone').value = rec.phone || '';
+      document.getElementById('apply-shop-location').value = rec.location || '';
+      document.getElementById('apply-shop-desc').value = rec.description || '';
+      if (submitBtn) submitBtn.textContent = 'Update Pending Application';
+    }
+  }
+
   document.getElementById('seller-apply-modal').classList.remove('hidden');
 }
 
