@@ -38,7 +38,8 @@ export const state = {
   notifications: [],
   chatMessages: [],
   activeChatPartnerId: null,
-  cart: JSON.parse(localStorage.getItem('markethub_cart') || '[]'),
+  cart: JSON.parse(localStorage.getItem('markethub_cart_guest') || '[]'),
+  appliedCheckoutVoucher: null,
   selectedCategory: 'All Categories',
   selectedShopId: 'all',
   sortMode: 'popular',
@@ -50,6 +51,7 @@ export const state = {
   productPhotoSlots: [null, null],
   tempBarangayRules: [],
   tempSellerQrUrl: '',
+  tempShopLogoUrl: '',
   incomePieChartInstance: null,
   deferredInstallPrompt: null
 };
