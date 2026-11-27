@@ -4,7 +4,7 @@
 import { supabaseClient, state } from './config.js';
 import { showToast } from './utils.js';
 import { loadMarketplaceData, loadDemoFallbackData } from './marketplace.js';
-import { updateCartBadge } from './cart.js';
+import { updateCartBadge, loadCartForCurrentUser } from './cart.js';
 import { loadNotifications, loadChatMessages } from './chat.js';
 import { switchView } from './navigation.js';
 
@@ -85,13 +85,12 @@ export async function handleAuthSubmit(e) {
 export async function signOut() {
   if (supabaseClient) {
     await supabaseClient.auth.signOut({ scope: 'local' }).catch(() => {});
-    state.cart = [];
-localStorage.removeItem('markethub_cart');
-updateCartBadge();
   }
   state.currentUser = null;
   state.currentProfile = null;
   state.currentSellerRecord = null;
+  state.appliedCheckoutVoucher = null;
+  loadCartForCurrentUser();
   updateAuthUI();
   switchView('marketplace');
   showToast('Signed out.');
@@ -108,6 +107,8 @@ function attachAuthStateWatcher() {
       state.currentUser = null;
       state.currentProfile = null;
       state.currentSellerRecord = null;
+      state.appliedCheckoutVoucher = null;
+      loadCartForCurrentUser();
       updateAuthUI();
     }
   });
@@ -115,6 +116,7 @@ function attachAuthStateWatcher() {
 
 export async function loadUserSession() {
   if (!supabaseClient) {
+    loadCartForCurrentUser();
     loadDemoFallbackData();
     return;
   }
@@ -128,6 +130,7 @@ export async function loadUserSession() {
     state.currentUser = null;
     state.currentProfile = null;
     state.currentSellerRecord = null;
+    loadCartForCurrentUser();
     updateAuthUI();
     await loadMarketplaceData();
     return;
@@ -136,7 +139,6 @@ export async function loadUserSession() {
   state.currentUser = session?.user || null;
 
   if (state.currentUser) {
-    // I-verify sa server at i-refresh ang token kung malapit nang mag-expire
     const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
     if (userErr || !userData?.user) {
       const { data: refreshed, error: refreshErr } = await supabaseClient.auth.refreshSession();
@@ -145,6 +147,7 @@ export async function loadUserSession() {
         state.currentUser = null;
         state.currentProfile = null;
         state.currentSellerRecord = null;
+        loadCartForCurrentUser();
         updateAuthUI();
         showToast('Session expired. Please sign in again.', 'warning');
         await loadMarketplaceData();
@@ -188,10 +191,12 @@ export async function loadUserSession() {
       .maybeSingle();
     state.currentSellerRecord = sellerRec || null;
 
+    loadCartForCurrentUser();
     await Promise.all([loadNotifications(), loadChatMessages()]);
   } else {
     state.currentProfile = null;
     state.currentSellerRecord = null;
+    loadCartForCurrentUser();
   }
 
   updateAuthUI();
