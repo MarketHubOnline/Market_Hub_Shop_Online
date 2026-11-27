@@ -416,6 +416,12 @@
   box-shadow: var(--shadow-xs);
 }
 
+#selected-shop-sub {
+  white-space: pre-line;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
 /* =========================================================
    REALISTIC E-COMMERCE PRODUCT CARDS (PC & MOBILE GRID)
    ========================================================= */
@@ -831,7 +837,14 @@
 
 .pdp-spec-row { display: grid; grid-template-columns: 155px 1fr; gap: 0.75rem; padding: 0.45rem 0.4rem; font-size: 0.86rem; }
 .pdp-spec-label { color: var(--muted); }
-.pdp-description-text { font-size: 0.9rem; color: var(--text-secondary); line-height: 1.68; white-space: pre-line; padding: 0 0.4rem; }
+.pdp-description-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.68;
+  white-space: pre-line;
+  word-break: break-word;
+  padding: 0 0.4rem;
+}
 
 .rating-overview-box {
   background: var(--primary-soft);
