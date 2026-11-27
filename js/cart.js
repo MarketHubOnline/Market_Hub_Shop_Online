@@ -1,5 +1,5 @@
 // =========================================================
-// SHOPPING CART, AUTO-DETECT VOUCHERS & BARANGAY SHIPPING FEE CALCULATOR
+// SHOPPING CART, AUTO-DETECT VOUCHERS (DISCOUNT + FREE SHIP) & SHIPPING CALCULATOR
 // =========================================================
 import { supabaseClient, state, PLACEHOLDER_IMG } from './config.js';
 import { escapeHtml, formatPeso, getProductImages, showToast } from './utils.js';
@@ -140,12 +140,16 @@ function getSellerSubtotalsMap() {
   return map;
 }
 
-function computeVoucherDiscountAmount(voucher, sellerSubtotal) {
-  if (!voucher || sellerSubtotal < Number(voucher.min_spend || 0)) return 0;
-  if (voucher.discount_type === 'percent') {
-    return Math.min(sellerSubtotal, sellerSubtotal * (Number(voucher.discount_value || 0) / 100));
+function formatVoucherBadgeLabel(v) {
+  if (v.discount_type === 'free_shipping') {
+    return Number(v.discount_value || 0) > 0
+      ? `🚚 FREE SHIPPING (up to ${formatPeso(v.discount_value)})`
+      : '🚚 100% FREE SHIPPING';
   }
-  return Math.min(sellerSubtotal, Number(voucher.discount_value || 0));
+  if (v.discount_type === 'percent') {
+    return `🏷️ ${Number(v.discount_value)}% OFF`;
+  }
+  return `💵 ${formatPeso(v.discount_value)} OFF`;
 }
 
 function ensureAutoVoucherContainer() {
@@ -180,18 +184,17 @@ export function renderAutoDetectedVouchers() {
     const isEligible = shopSub >= minSpend;
     const isApplied = appliedVoucherObj && String(appliedVoucherObj.id) === String(v.id);
     const shopName = state.allSellers.find(s => s.user_id === v.seller_id)?.shop_name || v.shop_name || 'Shop';
-    const discLabel = v.discount_type === 'percent'
-      ? `${Number(v.discount_value)}% OFF`
-      : `${formatPeso(v.discount_value)} OFF`;
+    const discLabel = formatVoucherBadgeLabel(v);
     const missingAmt = Math.max(0, minSpend - shopSub);
+    const isFreeShipVoucher = v.discount_type === 'free_shipping';
 
     if (isEligible) {
       return `
         <div onclick="selectAutoVoucher('${escapeHtml(v.id)}')"
-          style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.55rem 0.75rem;margin-bottom:0.4rem;border-radius:8px;cursor:pointer;border:1.5px solid ${isApplied ? '#15803d' : '#4ade80'};background:${isApplied ? '#dcfce7' : '#ffffff'};transition:all 0.15s;">
+          style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;padding:0.55rem 0.75rem;margin-bottom:0.4rem;border-radius:8px;cursor:pointer;border:1.5px solid ${isApplied ? '#15803d' : (isFreeShipVoucher ? '#0284c7' : '#4ade80')};background:${isApplied ? '#dcfce7' : '#ffffff'};transition:all 0.15s;">
           <div style="min-width:0;">
-            <div style="font-size:0.78rem;font-weight:800;color:var(--primary-deep);">
-              🎟️ ${escapeHtml(v.code)} — <span style="color:#15803d;">${discLabel}</span>
+            <div style="font-size:0.78rem;font-weight:800;color:${isFreeShipVoucher ? '#0369a1' : 'var(--primary-deep)'};">
+              ${escapeHtml(v.code)} — <span>${discLabel}</span>
             </div>
             <div style="font-size:0.71rem;color:var(--text-secondary);">
               🏪 ${escapeHtml(shopName)} • Min. spend ${formatPeso(minSpend)} (Unlocked!)
@@ -221,7 +224,7 @@ export function renderAutoDetectedVouchers() {
 
   box.innerHTML = `
     <div style="font-size:0.74rem;font-weight:800;color:var(--primary-deep);margin-bottom:0.35rem;text-transform:uppercase;letter-spacing:0.03em;">
-      ✨ Available Shop Vouchers (1-Click Apply)
+      ✨ Available Shop Offers &amp; Vouchers (1-Click Apply)
     </div>
     ${chipsHtml}
   `;
@@ -237,9 +240,9 @@ export function selectAutoVoucher(voucherId) {
     return showToast(`Minimum spend of ${formatPeso(v.min_spend)} required for this shop.`, 'warning');
   }
 
-  // Toggle off if already selected
   if (appliedVoucherObj && String(appliedVoucherObj.id) === String(v.id)) {
     appliedVoucherObj = null;
+    state.appliedCheckoutVoucher = null;
     const codeInput = document.getElementById('checkout-voucher-code');
     if (codeInput) codeInput.value = '';
     const msgEl = document.getElementById('checkout-voucher-msg');
@@ -253,7 +256,9 @@ export function selectAutoVoucher(voucherId) {
     const msgEl = document.getElementById('checkout-voucher-msg');
     if (msgEl) {
       msgEl.style.color = '#15803d';
-      msgEl.textContent = `✓ Voucher "${v.code}" applied!`;
+      msgEl.textContent = v.discount_type === 'free_shipping'
+        ? `🚚 Free Shipping Voucher "${v.code}" applied!`
+        : `✓ Discount Voucher "${v.code}" applied!`;
     }
     showToast(`Voucher "${v.code}" applied!`);
   }
@@ -319,7 +324,9 @@ export async function applyCheckoutVoucher() {
   state.appliedCheckoutVoucher = found;
   if (msgEl) {
     msgEl.style.color = '#15803d';
-    msgEl.textContent = `✓ Voucher "${found.code}" applied!`;
+    msgEl.textContent = found.discount_type === 'free_shipping'
+      ? `🚚 Free Shipping Voucher "${found.code}" applied!`
+      : `✓ Discount Voucher "${found.code}" applied!`;
   }
   renderAutoDetectedVouchers();
   recalculateCartCheckoutTotals();
@@ -389,7 +396,6 @@ export async function removeCartItem(idx) {
 }
 
 export function computeShippingForSellerGroup(sellerId, items, barangayInput) {
-  // Filter items that require shipping (exclude items toggled as Free Shipping by seller)
   const chargeableItems = items.filter(i => i.is_free_shipping !== true);
   if (chargeableItems.length === 0) return 0;
 
@@ -414,18 +420,32 @@ export function recalculateCartCheckoutTotals() {
     grouped[item.seller_id].push(item);
   });
 
+  const sellerShippingMap = {};
   let shippingTotal = 0;
   Object.entries(grouped).forEach(([sid, items]) => {
-    shippingTotal += computeShippingForSellerGroup(sid, items, brgy);
+    const fee = computeShippingForSellerGroup(sid, items, brgy);
+    sellerShippingMap[sid] = fee;
+    shippingTotal += fee;
   });
 
-  // Auto-validate applied voucher if quantity dropped below min_spend
-  let discountTotal = 0;
+  let itemDiscountTotal = 0;
+  let shippingDiscountTotal = 0;
   const sellerSubtotals = getSellerSubtotalsMap();
+
   if (appliedVoucherObj) {
-    const targetShopSub = sellerSubtotals[appliedVoucherObj.seller_id] || 0;
+    const targetSid = appliedVoucherObj.seller_id;
+    const targetShopSub = sellerSubtotals[targetSid] || 0;
+    const targetShopShip = sellerShippingMap[targetSid] || 0;
+
     if (targetShopSub >= Number(appliedVoucherObj.min_spend || 0) && targetShopSub > 0) {
-      discountTotal = computeVoucherDiscountAmount(appliedVoucherObj, targetShopSub);
+      if (appliedVoucherObj.discount_type === 'free_shipping') {
+        const cap = Number(appliedVoucherObj.discount_value || 0);
+        shippingDiscountTotal = cap > 0 ? Math.min(targetShopShip, cap) : targetShopShip;
+      } else if (appliedVoucherObj.discount_type === 'percent') {
+        itemDiscountTotal = Math.min(targetShopSub, targetShopSub * (Number(appliedVoucherObj.discount_value || 0) / 100));
+      } else {
+        itemDiscountTotal = Math.min(targetShopSub, Number(appliedVoucherObj.discount_value || 0));
+      }
     } else {
       appliedVoucherObj = null;
       state.appliedCheckoutVoucher = null;
@@ -435,21 +455,28 @@ export function recalculateCartCheckoutTotals() {
     }
   }
 
+  const netShipping = Math.max(0, shippingTotal - shippingDiscountTotal);
+  const totalSaved = itemDiscountTotal + shippingDiscountTotal;
+
   const discountRow = document.getElementById('checkout-discount-row');
   const discountValEl = document.getElementById('checkout-discount-val');
   if (discountRow && discountValEl) {
-    if (discountTotal > 0) {
+    if (totalSaved > 0) {
       discountRow.classList.remove('hidden');
-      discountValEl.textContent = `-${formatPeso(discountTotal)}`;
+      discountValEl.textContent = shippingDiscountTotal > 0 && itemDiscountTotal === 0
+        ? `-${formatPeso(shippingDiscountTotal)} (Free Shipping)`
+        : `-${formatPeso(totalSaved)}`;
     } else {
       discountRow.classList.add('hidden');
       discountValEl.textContent = '-₱0.00';
     }
   }
 
-  const grandTotal = Math.max(0, subtotal - discountTotal + shippingTotal);
+  const grandTotal = Math.max(0, subtotal - itemDiscountTotal + netShipping);
   document.getElementById('checkout-subtotal').textContent = formatPeso(subtotal);
-  document.getElementById('checkout-shipping').textContent = formatPeso(shippingTotal);
+  document.getElementById('checkout-shipping').textContent = netShipping === 0 && shippingTotal > 0
+    ? '₱0.00 (FREE)'
+    : formatPeso(netShipping);
   document.getElementById('checkout-grand-total').textContent = formatPeso(grandTotal);
 }
 
